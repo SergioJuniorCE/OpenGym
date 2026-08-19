@@ -6,6 +6,8 @@
   "main": "server.js",
   "license": "AGPL-3.0-or-later",
   "scripts": {
+    "dev": "node --watch server.js",
+    "build": "node --check server.js",
     "start": "node server.js"
   },
   "dependencies": {

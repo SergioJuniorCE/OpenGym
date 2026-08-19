@@ -1,0 +1,35 @@
+{
+  "$schema": "https://turbo.build/schema.json",
+  "tasks": {
+    "build": {
+      "dependsOn": ["^build"],
+      "outputs": ["dist/**"],
+      "env": ["VITE_*", "API_TARGET", "MEDIA_TARGET"]
+    },
+    "dev": {
+      "cache": false,
+      "persistent": true,
+      "env": [
+        "DATA_DIR",
+        "ORIGIN",
+        "RP_ID",
+        "RP_NAME",
+        "PORT",
+        "VITE_*",
+        "API_TARGET",
+        "MEDIA_TARGET"
+      ]
+    },
+    "test": {
+      "outputs": []
+    },
+    "test:watch": {
+      "cache": false,
+      "persistent": true
+    },
+    "build:mobile": {
+      "cache": false,
+      "outputs": ["dist/**"]
+    }
+  }
+}

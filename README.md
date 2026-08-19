@@ -83,6 +83,19 @@ as a home-screen app, passkey sign-in, offline support, sync across your phone a
 - 📦 **Yours to keep** — one-tap JSON export/import, guest mode, **no telemetry**
 - 📱 **Standalone Android app** — the whole tracker as a sideloadable APK: no account, no server, data on the phone, native workout reminders ([download](https://opengym.duarte-santos.ch))
 
+## Local development
+
+The repository is a pnpm workspace managed by Turborepo. With Node 20.19+ and pnpm 10 installed:
+
+```bash
+pnpm install
+pnpm dev
+```
+
+This starts the API and Vite frontend together at **http://localhost:5173**, stores development
+data in `data-dev/`, and loads exercise media from the pinned upstream CDN. Run `pnpm test` for the
+frontend logic tests or `pnpm build` for the workspace build.
+
 ## Quick start (self-host)
 
 You need [Docker](https://docs.docker.com/get-docker/) with Compose.
@@ -131,8 +144,8 @@ mobile app is the install-and-done flavor.
                                         └──────────────────────────┘
 ```
 
-- **frontend/** — React + Vite (React Router + Zustand), built to static files **inside Docker**
-- **api/** — Node with no framework, one dependency (`@simplewebauthn/server`), storing everything as plain JSON files under `./data`
+- **apps/web/** — React + Vite (React Router + Zustand), built to static files **inside Docker**
+- **apps/api/** — Node with no framework, one dependency (`@simplewebauthn/server`), storing everything as plain JSON files under `./data`
 - **web/** — a multi-stage image that builds the frontend and serves it with nginx, proxying `/api` to the backend so it's all on **one origin** (passkeys require this)
 
 ## Your data
@@ -180,8 +193,8 @@ No database server, no cloud dependencies — the frontend builds inside Docker,
 stays a one-command `docker compose up`.
 
 The training logic — progression rules, 1RM estimation, how a logged session is read back —
-lives in pure functions under `frontend/src/lib/` with tests next to them: `npm test` in
-`frontend/`. Vitest is a dev dependency; the app itself ships no runtime dependencies beyond
+lives in pure functions under `apps/web/src/lib/` with tests next to them: `pnpm test` in
+`apps/web/`. Vitest is a dev dependency; the app itself ships no runtime dependencies beyond
 React, the router and Zustand.
 
 ## Community
