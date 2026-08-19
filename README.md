@@ -85,19 +85,40 @@ as a home-screen app, passkey sign-in, offline support, sync across your phone a
 
 ## Local development
 
-The repository is a pnpm workspace managed by Turborepo. With Node 20.19+ and pnpm 10 installed:
+The repository is a pnpm workspace managed by Turborepo. Install Node 20.19+ and pnpm 10 first
+(Node 22.13+ is required for the Expo mobile app).
 
 ```bash
 pnpm install
 cp apps/api/.env.example apps/api/.env
 cp apps/web/.env.example apps/web/.env
-pnpm dev
+pnpm run dev
 ```
 
-This starts the API and Vite frontend together at **http://localhost:5173**, stores development
-data in `data-dev/`, and loads exercise media from the pinned upstream CDN. The root command is a
-direct Turborepo invocation; local settings live in each app's `.env`. Run `pnpm test` for the
+On Windows PowerShell, use `Copy-Item apps/api/.env.example apps/api/.env` and
+`Copy-Item apps/web/.env.example apps/web/.env` instead of `cp`.
+
+This starts the API on **http://localhost:3000** and the Vite frontend on
+**http://localhost:5173**, stores development data in `data-dev/`, and loads exercise media from
+the pinned upstream CDN. The API and frontend each read their own ignored `.env` file; the root
+`.env.example` is for Docker self-hosting, not this local workflow. Run `pnpm test` for the
 frontend logic tests or `pnpm build` for the workspace build.
+
+### Native mobile development
+
+The mobile app is a standalone native Expo app. It does not run as part of `pnpm run dev` and does
+not use the browser app or a WebView:
+
+```bash
+pnpm --filter opengym-mobile typecheck
+pnpm --filter opengym-mobile start
+
+# Native builds
+pnpm --filter opengym-mobile android
+pnpm --filter opengym-mobile ios       # macOS only
+```
+
+See [docs/MOBILE.md](docs/MOBILE.md) for Expo prerequisites, native configuration, and EAS builds.
 
 ## Quick start (self-host)
 
