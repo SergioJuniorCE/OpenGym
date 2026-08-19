@@ -7,7 +7,7 @@ to keep it that way — easy to read, easy to self-host.
 
 ```
 apps/web/  React + Vite app (src/views, src/components, src/store, src/lib). Builds to static files.
-apps/mobile/ Expo native shell for the standalone mobile app (docs/MOBILE.md).
+apps/mobile/ Expo + TypeScript native shell for the standalone mobile app (docs/MOBILE.md).
 apps/api/  backend — server.js (Node, no framework), one dependency (@simplewebauthn/server).
 web/       multi-stage Dockerfile (builds frontend → nginx) + nginx.conf (serves app, proxies /api).
 media/     exercise img/gif (gitignored, fetched at runtime).
@@ -18,16 +18,18 @@ docs/      self-hosting guide.
 
 ```bash
 pnpm install
+cp apps/api/.env.example apps/api/.env
+cp apps/web/.env.example apps/web/.env
 pnpm dev                            # API + frontend via Turborepo
 # open http://localhost:5173
 # training logic (progression rules, 1RM, how a session is read back):
 pnpm test
 ```
 
-The root project is a pnpm workspace managed by Turborepo. `pnpm dev` keeps API data in
-`data-dev/` and loads exercise media from the pinned upstream CDN, so local development does not
-modify the checked-in `data/` or require Docker. Override `DATA_DIR`, `ORIGIN`, `RP_ID`, or the
-media variables when testing a different setup.
+The root project is a pnpm workspace managed by Turborepo. The app-local `.env` files keep API
+data in `data-dev/` and load exercise media from the pinned upstream CDN, so local development does
+not modify the checked-in `data/` or require Docker. Edit `apps/api/.env` or `apps/web/.env` when
+testing a different setup.
 
 ## Guidelines
 

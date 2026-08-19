@@ -12,7 +12,7 @@ openGym ships in two flavors from the same codebase:
 
 The mobile flavor never talks to a backend: no sign-in screen, no sync, no telemetry. The
 existing Vite UI is flattened into one HTML asset and rendered by an Expo WebView. Native
-requests from that UI are handled by `apps/mobile/App.js`:
+requests from that UI are handled by `apps/mobile/App.tsx`:
 
 - `expo-file-system` mirrors `opengym-state.json` in private app storage.
 - `expo-notifications` schedules workout-day reminders.

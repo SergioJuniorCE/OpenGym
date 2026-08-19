@@ -89,11 +89,14 @@ The repository is a pnpm workspace managed by Turborepo. With Node 20.19+ and pn
 
 ```bash
 pnpm install
+cp apps/api/.env.example apps/api/.env
+cp apps/web/.env.example apps/web/.env
 pnpm dev
 ```
 
 This starts the API and Vite frontend together at **http://localhost:5173**, stores development
-data in `data-dev/`, and loads exercise media from the pinned upstream CDN. Run `pnpm test` for the
+data in `data-dev/`, and loads exercise media from the pinned upstream CDN. The root command is a
+direct Turborepo invocation; local settings live in each app's `.env`. Run `pnpm test` for the
 frontend logic tests or `pnpm build` for the workspace build.
 
 ## Quick start (self-host)

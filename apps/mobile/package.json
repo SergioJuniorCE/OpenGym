@@ -8,6 +8,7 @@
     "android": "node scripts/prepare-mobile.mjs && expo run:android",
     "ios": "node scripts/prepare-mobile.mjs && expo run:ios",
     "prebuild": "node scripts/prepare-mobile.mjs && expo prebuild",
+    "typecheck": "tsc --noEmit",
     "sync:web": "node scripts/sync-web.mjs",
     "build:mobile": "node scripts/prepare-mobile.mjs"
   },
@@ -25,5 +26,9 @@
     "react-dom": "19.2.3",
     "react-native": "0.86.2",
     "react-native-webview": "13.16.1"
+  },
+  "devDependencies": {
+    "@types/react": "~19.2.0",
+    "typescript": "~6.0.3"
   }
 }
