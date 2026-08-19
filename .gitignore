@@ -6,5 +6,6 @@ data-dev/
 .env
 .env.*
 !.env.example
+!.env.mobile
 pnpm-debug.log*
 .DS_Store

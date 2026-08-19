@@ -2,103 +2,74 @@
 
 openGym ships in two flavors from the same codebase:
 
-| | **Self-hosted** (this repo's default) | **Mobile app** (`VITE_MOBILE=1`) |
+| | **Self-hosted** (this repo's default) | **Mobile app** (`Vite` mobile mode) |
 |---|---|---|
-| Runs | in any browser, against your own server | natively on iPhone / Android (Capacitor shell) |
+| Runs | in any browser, against your own server | in an Expo native shell on iPhone / Android |
 | Accounts | passkey sign-in, one profile per person | none — the phone *is* the account |
 | Data | synced to your server, readable on desktop | stays on the device (file in the app's private storage) |
 | Reminders | Web Push from your server | native local notifications, no server involved |
 | Exercise media | served by your server (`img/`, `gif/`) | loaded from the jsDelivr CDN |
 
-The mobile flavor never talks to a backend: no sign-in screen, no sync, no telemetry.
-State is mirrored from `localStorage` into `opengym-state.json` in the app's private data
-directory on every change (iOS is allowed to evict WebView storage under pressure — the
-file mirror is the durable copy and is restored on launch). Backups go out through the
-OS share sheet instead of a browser download.
+The mobile flavor never talks to a backend: no sign-in screen, no sync, no telemetry. The
+existing Vite UI is flattened into one HTML asset and rendered by an Expo WebView. Native
+requests from that UI are handled by `apps/mobile/App.js`:
+
+- `expo-file-system` mirrors `opengym-state.json` in private app storage.
+- `expo-notifications` schedules workout-day reminders.
+- `expo-sharing` sends JSON backups to the OS share sheet.
 
 ## Prerequisites
 
-- Node 20+
-- **Android:** Android Studio (bundles the SDK). Java 21 for Gradle.
-- **iOS:** a Mac with Xcode 15+ and CocoaPods (`brew install cocoapods`). A free Apple ID
-  is enough to run the app on your own iPhone (see below); paid membership is only needed
-  for App Store distribution, which openGym doesn't do.
+- Node 22.13+ for Expo SDK 57 (the web app itself still supports Node 20.19+).
+- pnpm 10+
+- **Android:** Android Studio and its SDK; Java 21 for Gradle.
+- **iOS:** a Mac with Xcode 26.4+ and CocoaPods. A free Apple ID is enough to run the app
+  on your own iPhone; paid membership is only needed for store distribution.
 
-## Build & run
+## Build and run
+
+From the repository root:
 
 ```sh
-cd apps/web
 pnpm install
-pnpm run build:mobile        # VITE_MOBILE build + `cap sync` into android/ and ios/
+pnpm build:mobile
 
-pnpm exec cap open android  # opens Android Studio → run on emulator or device
-pnpm exec cap open ios      # opens Xcode (Mac only) → set your signing team, then run
+# Development server / Expo Go or a development build
+pnpm --filter opengym-mobile start
+
+# Native builds (prebuild creates apps/mobile/android and apps/mobile/ios as ignored output)
+pnpm --filter opengym-mobile android
+pnpm --filter opengym-mobile ios       # macOS only
 ```
 
-`pnpm run build:mobile` bakes the CDN media base into the bundle and copies the web build
-into both native projects — re-run it after every web-code change before building natively.
+`pnpm build:mobile` builds the `apps/web` mobile flavor and writes the generated WebView asset
+to `apps/mobile/assets/opengym.html`. That file is intentionally ignored: rerun the command
+after changing the web UI. The Expo package's `start`, `android`, and `ios` scripts prepare it
+automatically.
 
-> **Heads-up:** after `build:mobile`, `apps/web/dist` contains the *mobile* bundle.
-> Run a plain `pnpm build` again before deploying `dist` to a server.
+The mobile bundle uses the pinned exercise CDN, while ordinary `pnpm build` continues to build
+the self-hosted browser bundle. There is no native sync step or checked-in native project.
 
-## App icons & splash screens
+## App icons and native configuration
 
-`apps/web/resources/icon.svg` is the 1024×1024 source (the app's dumbbell glyph on the
-app background). Generate all platform assets from it on a machine with the tooling:
+`apps/mobile/app.json` points Expo at the shared `apps/web/public/icon-512.png` asset and keeps
+the package identifiers used by the previous release:
+
+- Android: `ch.duartesantos.opengym`
+- iOS: `ch.duartesantos.opengym`
+
+Expo generates native projects on demand with `expo prebuild`; generated `android/` and `ios/`
+directories under `apps/mobile` must not be committed.
+
+## Distribution
+
+The project remains deliberately store-neutral. For a local Android artifact, use the generated
+native project or an EAS build profile. For example, after installing/configuring EAS:
 
 ```sh
-cd apps/web
-pnpm exec capacitor-assets generate --iconBackgroundColor '#0c0e12' --splashBackgroundColor '#0c0e12'
+pnpm dlx eas-cli build --platform android
+pnpm dlx eas-cli build --platform ios
 ```
 
-(If the generator won't take the SVG directly, export it to `resources/icon.png` at
-1024×1024 first — any image tool can do it.)
-
-## Distribution — deliberately no app stores
-
-openGym's mobile app is not on the Play Store or App Store, and that's a choice: no store
-accounts, no store rules, no yearly fees between you and an open-source app.
-
-### Android — sideload the APK
-
-The official signed APK is at **[opengym.duarte-santos.ch](https://opengym.duarte-santos.ch)**.
-Android asks you to allow installs from the browser the first time — that's standard for any
-app outside the Play Store.
-
-To build and sign your own:
-
-```sh
-cd apps/web && pnpm run build:mobile
-cd android && ./gradlew assembleRelease            # → app/build/outputs/apk/release/app-release-unsigned.apk
-
-# one-time: create a keystore. KEEP IT — updates must be signed with the same key,
-# or Android refuses to install the new version over the old one.
-keytool -genkeypair -keystore my.keystore -alias opengym -keyalg RSA -validity 10950
-
-# align + sign (zipalign/apksigner ship with the Android SDK build-tools)
-zipalign -f -p 4 app-release-unsigned.apk aligned.apk
-apksigner sign --ks my.keystore --ks-key-alias opengym --out openGym.apk aligned.apk
-```
-
-### iPhone — what's actually possible
-
-Apple does not allow installing apps outside the App Store, so there is no `.ipa` download
-that would simply install. Your free options:
-
-- **Self-host + PWA** (recommended): open your instance in Safari → Share → *Add to Home
-  Screen*. Full-screen app, no expiry, plus sync and passkeys.
-- **Xcode free signing:** open `ios/` in Xcode with a free Apple ID as the team and run it
-  onto your own iPhone. Apple expires the signature after 7 days; re-run from Xcode to renew.
-- **AltStore:** automates that 7-day re-signing over Wi-Fi via a Mac companion app.
-
-### Release notes for maintainers
-
-- Bump `versionName`/`versionCode` in `android/app/build.gradle` per release; keep them in
-  step with `apps/web/package.json`. `versionCode` must strictly increase or updates won't
-  install over an existing APK.
-- **License:** openGym is AGPL-3.0, which by itself sits badly with app-store terms of
-  service. `NOTICE.md` carries an app-store exception (an additional permission under
-  AGPL §7) granted by the copyright holder — relevant only if store distribution ever happens.
-- The app requests notification permission only when the workout-day reminder is switched
-  on, and (on Android) declares `SCHEDULE_EXACT_ALARM` so the reminder fires to the minute
-  where the user allows it.
+Apple still requires signing for iPhone installation. A free Apple ID can run a local development
+build with the usual signing limits; store distribution requires the appropriate Apple account.

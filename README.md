@@ -118,7 +118,7 @@ a build step locally either way.
 
 ## Mobile app (no server at all)
 
-The same codebase also builds a **standalone mobile app** (Capacitor): no account, no sync,
+The same codebase also builds a **standalone mobile app** (Expo): no account, no sync,
 no backend — everything stays on the phone, with native workout-day reminders and share-sheet
 backups. Self-hosting gets you multi-device sync and profiles for friends & family; the
 mobile app is the install-and-done flavor.

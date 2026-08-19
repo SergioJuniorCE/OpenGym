@@ -1,0 +1,23 @@
+{
+  "expo": {
+    "name": "openGym",
+    "slug": "opengym",
+    "version": "1.2.4",
+    "orientation": "portrait",
+    "icon": "../web/public/icon-512.png",
+    "assetBundlePatterns": ["assets/**/*"],
+    "ios": {
+      "bundleIdentifier": "ch.duartesantos.opengym",
+      "supportsTablet": true
+    },
+    "android": {
+      "package": "ch.duartesantos.opengym",
+      "adaptiveIcon": {
+        "foregroundImage": "../web/public/icon-512.png",
+        "backgroundColor": "#0c0e12"
+      },
+      "permissions": ["POST_NOTIFICATIONS"]
+    },
+    "plugins": ["expo-notifications"]
+  }
+}

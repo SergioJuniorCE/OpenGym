@@ -67,7 +67,7 @@ in the thread; there's no objection, and no request to sit on it indefinitely.
 - Instances served over plain `http://` on a LAN IP. Unsupported: passkeys don't work there and
   the session cookie isn't marked `Secure`.
 - Scanner output with no working exploit, and `npm audit` findings in build-time
-  devDependencies (Vite, Vitest, Capacitor CLI) that never reach a running instance.
+  devDependencies (Vite, Vitest, Expo CLI) that never reach a running instance.
 - The GitHub Pages demo build — it has no backend at all, everything stays in that browser.
 - Third-party content: the exercise image/GIF dataset and the CDN it's fetched from.
 

@@ -8,7 +8,7 @@
     "build": "turbo run build",
     "test": "turbo run test",
     "test:watch": "turbo run test:watch",
-    "build:mobile": "turbo run build:mobile --filter=opengym-frontend"
+    "build:mobile": "pnpm --filter opengym-mobile build:mobile"
   },
   "engines": {
     "node": ">=20.19.0"
