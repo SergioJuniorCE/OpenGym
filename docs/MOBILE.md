@@ -27,28 +27,28 @@ OS share sheet instead of a browser download.
 ## Build & run
 
 ```sh
-cd frontend
-npm install
-npm run build:mobile        # VITE_MOBILE build + `cap sync` into android/ and ios/
+cd apps/web
+pnpm install
+pnpm run build:mobile        # VITE_MOBILE build + `cap sync` into android/ and ios/
 
-npx cap open android        # opens Android Studio → run on emulator or device
-npx cap open ios            # opens Xcode (Mac only) → set your signing team, then run
+pnpm exec cap open android  # opens Android Studio → run on emulator or device
+pnpm exec cap open ios      # opens Xcode (Mac only) → set your signing team, then run
 ```
 
-`npm run build:mobile` bakes the CDN media base into the bundle and copies the web build
+`pnpm run build:mobile` bakes the CDN media base into the bundle and copies the web build
 into both native projects — re-run it after every web-code change before building natively.
 
-> **Heads-up:** after `build:mobile`, `frontend/dist` contains the *mobile* bundle.
-> Run a plain `npm run build` again before deploying `dist` to a server.
+> **Heads-up:** after `build:mobile`, `apps/web/dist` contains the *mobile* bundle.
+> Run a plain `pnpm build` again before deploying `dist` to a server.
 
 ## App icons & splash screens
 
-`frontend/resources/icon.svg` is the 1024×1024 source (the app's dumbbell glyph on the
+`apps/web/resources/icon.svg` is the 1024×1024 source (the app's dumbbell glyph on the
 app background). Generate all platform assets from it on a machine with the tooling:
 
 ```sh
-cd frontend
-npx @capacitor/assets generate --iconBackgroundColor '#0c0e12' --splashBackgroundColor '#0c0e12'
+cd apps/web
+pnpm exec capacitor-assets generate --iconBackgroundColor '#0c0e12' --splashBackgroundColor '#0c0e12'
 ```
 
 (If the generator won't take the SVG directly, export it to `resources/icon.png` at
@@ -68,7 +68,7 @@ app outside the Play Store.
 To build and sign your own:
 
 ```sh
-cd frontend && npm run build:mobile
+cd apps/web && pnpm run build:mobile
 cd android && ./gradlew assembleRelease            # → app/build/outputs/apk/release/app-release-unsigned.apk
 
 # one-time: create a keystore. KEEP IT — updates must be signed with the same key,
@@ -94,7 +94,7 @@ that would simply install. Your free options:
 ### Release notes for maintainers
 
 - Bump `versionName`/`versionCode` in `android/app/build.gradle` per release; keep them in
-  step with `frontend/package.json`. `versionCode` must strictly increase or updates won't
+  step with `apps/web/package.json`. `versionCode` must strictly increase or updates won't
   install over an existing APK.
 - **License:** openGym is AGPL-3.0, which by itself sits badly with app-store terms of
   service. `NOTICE.md` carries an app-store exception (an additional permission under

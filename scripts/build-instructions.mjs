@@ -1,5 +1,5 @@
 #!/usr/bin/env node
-// Regenerates the per-language exercise instruction packs in frontend/src/instr/
+// Regenerates the per-language exercise instruction packs in apps/web/src/instr/
 // from the upstream dataset (hasaneyldrm/exercises-dataset). English stays inline
 // in exercises-data.js; every other language ships as its own lazy-loaded pack.
 //
@@ -15,7 +15,7 @@ const UPSTREAM = 'https://raw.githubusercontent.com/hasaneyldrm/exercises-datase
 const LANGS = ['es', 'fr', 'it', 'tr', 'ru', 'zh', 'hi', 'pl', 'ko']
 
 const root = join(dirname(fileURLToPath(import.meta.url)), '..')
-const outDir = join(root, 'frontend', 'src', 'instr')
+const outDir = join(root, 'apps', 'web', 'src', 'instr')
 
 let raw
 if (process.argv[2]) {

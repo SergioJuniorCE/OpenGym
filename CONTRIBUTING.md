@@ -6,9 +6,9 @@ to keep it that way — easy to read, easy to self-host.
 ## Project layout
 
 ```
-frontend/  React + Vite app (src/views, src/components, src/store, src/lib). Builds to static files.
+apps/web/  React + Vite app (src/views, src/components, src/store, src/lib). Builds to static files.
            android/ + ios/ are the Capacitor shells for the standalone mobile app (docs/MOBILE.md).
-api/       backend — server.js (Node, no framework), one dependency (@simplewebauthn/server).
+apps/api/  backend — server.js (Node, no framework), one dependency (@simplewebauthn/server).
 web/       multi-stage Dockerfile (builds frontend → nginx) + nginx.conf (serves app, proxies /api).
 media/     exercise img/gif (gitignored, fetched at runtime).
 docs/      self-hosting guide.
@@ -17,18 +17,22 @@ docs/      self-hosting guide.
 ## Running for development
 
 ```bash
-cp .env.example .env
-docker compose up -d --build      # api + web + media on :8080
-# frontend hot reload:
-cd frontend && npm install && npm run dev
+pnpm install
+pnpm dev                            # API + frontend via Turborepo
+# open http://localhost:5173
 # training logic (progression rules, 1RM, how a session is read back):
-cd frontend && npm test
+pnpm test
 ```
+
+The root project is a pnpm workspace managed by Turborepo. `pnpm dev` keeps API data in
+`data-dev/` and loads exercise media from the pinned upstream CDN, so local development does not
+modify the checked-in `data/` or require Docker. Override `DATA_DIR`, `ORIGIN`, `RP_ID`, or the
+media variables when testing a different setup.
 
 ## Guidelines
 
 - **Keep it dependency-light.** The frontend uses React + Router + Zustand and nothing else;
-  new deps (front or back) are a hard sell. `api/` has two (`@simplewebauthn/server` for passkeys,
+  new deps (front or back) are a hard sell. `apps/api/` has two (`@simplewebauthn/server` for passkeys,
   `web-push` for notifications) — keep it near that.
 - **Match the style.** Small components, clear names, comments only where the "why" isn't obvious.
   State lives in the Zustand store (`src/store`); pure helpers in `src/lib`.
@@ -36,7 +40,7 @@ cd frontend && npm test
 - **Test the flow** you touched — click through the affected screens (and the workout flow) in a
   browser before opening a PR.
 - **Training logic gets a unit test.** Anything deciding what you lift next, or reading a logged
-  session back, belongs in a pure helper in `src/lib` with tests beside it (`npm test`). These
+  session back, belongs in a pure helper in `src/lib` with tests beside it (`pnpm test`). These
   rules are easy to get subtly wrong and nearly impossible to verify by clicking — the
   progression engine grew two real bugs that only a test pinned down.
 
