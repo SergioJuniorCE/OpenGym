@@ -44,6 +44,13 @@ function Sheet({ sheet }) {
     return () => el.removeEventListener('touchmove', onTouchMove)
   }, [])
 
+  useEffect(() => {
+    if (sheet.locked) return
+    const onKeyDown = e => { if (e.key === 'Escape') closeSheet(sheet.id) }
+    document.addEventListener('keydown', onKeyDown)
+    return () => document.removeEventListener('keydown', onKeyDown)
+  }, [sheet.id, sheet.locked, closeSheet])
+
   const close = () => closeSheet(sheet.id)
   if (sheet.kind === 'center') {
     return (

@@ -104,7 +104,10 @@ function BwSheet({ required, onDone, close }) {
   const recent = [...st.bodyweight].reverse().slice(0, 3)
   const delEntry = d => update(s => { s.bodyweight = s.bodyweight.filter(b => b.d !== d) })
   return <>
-    <h3>{required ? t('Quick check-in') : t('Log body weight')}</h3>
+    <div className="row between" style={{ marginBottom: 14 }}>
+      <h3 style={{ margin: 0 }}>{required ? t('Quick check-in') : t('Log body weight')}</h3>
+      <button className="iconbtn" aria-label={t('Cancel')} onClick={close}><Icon name="xmark" /></button>
+    </div>
     <div className="muted small">{required ? t('Slide or tap to set your weight — tracked before every workout so your curve stays honest.') : t('Today') + ', ' + fmtDate(todayISO(), true)}</div>
     <WeightInput value={v} setValue={setV} unit={unit} />
     <div style={{ height: 14 }} />
@@ -126,7 +129,7 @@ function BwSheet({ required, onDone, close }) {
   </>
 }
 export function bwSheet(opts = {}) {
-  const h = ui().openSheet(close => <BwSheet {...opts} close={close} />, { locked: !!opts.required })
+  const h = ui().openSheet(close => <BwSheet {...opts} close={close} />)
   return h
 }
 
