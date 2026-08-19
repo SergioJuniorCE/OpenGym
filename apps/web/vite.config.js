@@ -3,7 +3,6 @@ import react from '@vitejs/plugin-react'
 
 export default defineConfig(({ mode }) => {
   const env = loadEnv(mode, process.cwd(), '')
-  const mobile = mode === 'mobile' || process.env.VITE_MOBILE === '1' || env.VITE_MOBILE === '1'
   const backend = process.env.API_TARGET || env.API_TARGET || 'http://127.0.0.1:3000'
   const media = process.env.MEDIA_TARGET || env.MEDIA_TARGET || 'http://127.0.0.1:8888'
 
@@ -18,11 +17,7 @@ export default defineConfig(({ mode }) => {
       }
     },
     build: {
-      chunkSizeWarningLimit: 1500,
-      // The Expo WebView receives one self-contained HTML asset. Keeping the normal
-      // browser build split preserves its cacheability; only the mobile build is flattened.
-      cssCodeSplit: !mobile,
-      ...(mobile ? { rolldownOptions: { output: { codeSplitting: false } } } : {})
+      chunkSizeWarningLimit: 1500
     }
   }
 })

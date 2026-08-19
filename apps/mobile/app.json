@@ -5,7 +5,6 @@
     "version": "1.2.4",
     "orientation": "portrait",
     "icon": "../web/public/icon-512.png",
-    "assetBundlePatterns": ["assets/**/*"],
     "ios": {
       "bundleIdentifier": "ch.duartesantos.opengym",
       "supportsTablet": true

@@ -26,10 +26,6 @@
     "test:watch": {
       "cache": false,
       "persistent": true
-    },
-    "build:mobile": {
-      "cache": false,
-      "outputs": ["dist/**"]
     }
   }
 }
