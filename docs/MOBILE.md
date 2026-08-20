@@ -6,7 +6,7 @@ use a WebView, or require a backend.
 
 ## Prerequisites
 
-- Node 22.18+ (the repository floor and Expo SDK 57 runtime)
+- Node 24.12+ LTS (the repository floor and Expo SDK 57 runtime)
 - pnpm 10+
 - **Android:** Android Studio, its SDK, and Java 21
 - **iOS:** macOS with Xcode 26.4+ and CocoaPods

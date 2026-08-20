@@ -13,7 +13,7 @@
   },
   "license": "AGPL-3.0-or-later",
   "engines": {
-    "node": ">=22.18.0"
+    "node": ">=24.12.0"
   },
   "dependencies": {
     "@opengym/ui": "workspace:*",
@@ -29,8 +29,8 @@
     "uniwind": "^1.11.0"
   },
   "devDependencies": {
-    "@types/node": "^22.18.0",
+    "@types/node": "^24.0.0",
     "@types/react": "~19.2.0",
-    "typescript": "~6.0.3"
+    "typescript": "7.0.2"
   }
 }

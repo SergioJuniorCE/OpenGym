@@ -1,6 +1,6 @@
 # Multi-stage: build the React app from its pnpm workspace, then serve it with nginx.
 # Self-hosters never need Node locally — `docker compose up` builds everything.
-FROM --platform=$BUILDPLATFORM node:22-alpine AS build
+FROM --platform=$BUILDPLATFORM node:24-alpine AS build
 WORKDIR /app
 RUN corepack enable
 COPY package.json pnpm-lock.yaml pnpm-workspace.yaml ./

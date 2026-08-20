@@ -13,7 +13,9 @@ patched. A fix ships in the next release and in the `latest` images on ghcr.io.
 Updating a self-hosted instance:
 
 ```bash
-git pull && docker compose pull && docker compose up -d
+git pull --ff-only
+docker compose -f docker-compose.yml -f compose.production.yml pull
+docker compose -f docker-compose.yml -f compose.production.yml up -d
 ```
 
 ## Reporting a vulnerability
@@ -48,7 +50,8 @@ in the thread; there's no objection, and no request to sit on it indefinitely.
   being an admin, or creating a profile without a valid code while `INVITE_ONLY=1`.
 - **Frontend** — XSS in the React app, or anything that lets a page on another origin read or
   change a signed-in user's data.
-- **Shipped deployment config** — `docker-compose.yml`, `web/nginx.conf`, the two Dockerfiles:
+- **Shipped deployment config** — `docker-compose.yml`, `compose.production.yml`,
+  `deploy/caddy/Caddyfile`, `web/nginx.conf`, and the two Dockerfiles:
   a default that exposes something a self-hoster wouldn't expect to be exposed.
 - **The published images** `ghcr.io/duartesantos8/opengym-api` and `-web`.
 

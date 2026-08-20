@@ -1,9 +1,9 @@
 #!/usr/bin/env node
 
-import { copyFileSync, mkdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs'
+import { execFileSync } from 'node:child_process'
+import { copyFileSync, existsSync, mkdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs'
 import { dirname, join, resolve } from 'node:path'
 import { fileURLToPath } from 'node:url'
-import ts from 'typescript'
 
 const root = resolve(dirname(fileURLToPath(import.meta.url)), '..')
 const websiteRoot = join(root, 'website')
@@ -20,34 +20,21 @@ for (const file of ['about.html', 'docs.html', 'index.html', 'styles.css'] as co
   copyFileSync(join(websiteRoot, file), join(outputDirectory, file))
 }
 
-const sourcePath = join(websiteRoot, 'site.ts')
-const source = readFileSync(sourcePath, 'utf8')
-const transpiled = ts.transpileModule(source, {
-  compilerOptions: {
-    module: ts.ModuleKind.ESNext,
-    target: ts.ScriptTarget.ES2023,
-    verbatimModuleSyntax: true,
-  },
-  fileName: sourcePath,
-  reportDiagnostics: true,
-})
-
-const errors = transpiled.diagnostics?.filter(
-  diagnostic => diagnostic.category === ts.DiagnosticCategory.Error,
+const tscPath = resolve(root, 'node_modules/typescript/bin/tsc')
+execFileSync(
+  process.execPath,
+  [tscPath, '-p', join(websiteRoot, 'tsconfig.build.json')],
+  { cwd: root, stdio: 'inherit' },
 )
-if (errors?.length) {
-  throw new Error(
-    ts.formatDiagnostics(errors, {
-      getCanonicalFileName: fileName => fileName,
-      getCurrentDirectory: () => root,
-      getNewLine: () => '\n',
-    }),
-  )
+
+const generatedSourcePath = join(outputDirectory, 'site.js')
+if (!existsSync(generatedSourcePath)) {
+  throw new Error(`TypeScript did not emit the expected website runtime: ${generatedSourcePath}`)
 }
 
 writeFileSync(
-  join(outputDirectory, 'site.js'),
-  `// Generated from website/site.ts by scripts/build-website.ts — do not edit.\n${transpiled.outputText}`,
+  generatedSourcePath,
+  `// Generated from website/site.ts by scripts/build-website.ts — do not edit.\n${readFileSync(generatedSourcePath, 'utf8')}`,
   'utf8',
 )
 

@@ -85,7 +85,7 @@ as a home-screen app, passkey sign-in, offline support, sync across your phone a
 
 ## Local development
 
-The repository is a TypeScript-only pnpm workspace managed by Turborepo. Install Node 22.18+ and
+The repository is a TypeScript-only pnpm workspace managed by Turborepo. Install Node 24.12+ LTS and
 pnpm 10 first.
 
 ```bash
@@ -128,14 +128,13 @@ You need [Docker](https://docs.docker.com/get-docker/) with Compose.
 git clone https://github.com/DuarteSantos8/openGym
 cd openGym
 cp .env.example .env
-docker compose pull   # grab prebuilt images (amd64 + arm64) — skip to build from source instead
-docker compose up -d
+docker compose up -d --build
 ```
 
 Open **http://localhost:8080**, tap **Create profile**, and you're in. First launch downloads
-the exercise media (~140 MB) once. Prefer building the images yourself instead of pulling from
-`ghcr.io`? Drop the `pull` step and run `docker compose up -d --build` — you don't need Node or
-a build step locally either way.
+the exercise media (~140 MB) once. The build runs entirely inside Docker, so Node and pnpm are
+not required on the host. For a VPS deployment with automatic HTTPS, see
+**[docs/SELF_HOSTING.md](docs/SELF_HOSTING.md)**.
 
 > Want it reachable from your phone over the internet with passkeys? You'll need an HTTPS
 > domain — a two-line change in `.env`. See **[docs/SELF_HOSTING.md](docs/SELF_HOSTING.md)**.
@@ -185,9 +184,13 @@ All via `.env` (see `.env.example`):
 
 | Variable      | What it is                                           | Default                 |
 |---------------|------------------------------------------------------|-------------------------|
+| `DOMAIN`      | Hostname used by the production Caddy overlay       | *(empty; local only)*   |
 | `RP_ID`       | Hostname passkeys are bound to                       | `localhost`             |
 | `ORIGIN`      | Full URL the app is served from                      | `http://localhost:8080` |
+| `WEB_BIND_ADDRESS` | Host address bound by the web container          | `127.0.0.1`             |
 | `WEB_PORT`    | Host port for the web UI                             | `8080`                  |
+| `OPENGYM_IMAGE_NAMESPACE` | Container registry namespace          | `ghcr.io/duartesantos8` |
+| `OPENGYM_IMAGE_TAG` | Container image tag                            | `latest`                |
 | `RP_NAME`     | Name shown in the passkey prompt                     | `openGym`               |
 | `ADMIN_UIDS`  | User ids that get the admin dashboard (comma-separated) | *(none)*             |
 | `INVITE_ONLY` | Require an invite code to create a profile           | *(off)*                 |
