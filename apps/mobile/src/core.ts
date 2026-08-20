@@ -1,4 +1,4 @@
-import { EXDB as DATASET } from '../../web/src/lib/exercises-data.js'
+import { EXDB as DATASET } from '../../web/src/lib/exercises-data'
 export { ACCENTS } from '@opengym/ui'
 
 export type Exercise = {

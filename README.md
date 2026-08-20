@@ -85,8 +85,8 @@ as a home-screen app, passkey sign-in, offline support, sync across your phone a
 
 ## Local development
 
-The repository is a pnpm workspace managed by Turborepo. Install Node 20.19+ and pnpm 10 first
-(Node 22.13+ is required for the Expo mobile app).
+The repository is a TypeScript-only pnpm workspace managed by Turborepo. Install Node 22.18+ and
+pnpm 10 first.
 
 ```bash
 pnpm install
@@ -101,8 +101,8 @@ On Windows PowerShell, use `Copy-Item apps/api/.env.example apps/api/.env` and
 This starts the API on **http://localhost:3000** and the Vite frontend on
 **http://localhost:5173**, stores development data in `data-dev/`, and loads exercise media from
 the pinned upstream CDN. The API and frontend each read their own ignored `.env` file; the root
-`.env.example` is for Docker self-hosting, not this local workflow. Run `pnpm test` for the
-frontend logic tests or `pnpm build` for the workspace build.
+`.env.example` is for Docker self-hosting, not this local workflow. Run `pnpm typecheck` for the
+workspace TypeScript gate, `pnpm test` for tests, or `pnpm build` for production builds.
 
 ### Native mobile development
 
@@ -169,8 +169,8 @@ mobile app is the install-and-done flavor.
 ```
 
 - **apps/web/** — React + Vite (React Router + Zustand), built to static files **inside Docker**
-- **apps/api/** — Node with no framework, one dependency (`@simplewebauthn/server`), storing everything as plain JSON files under `./data`
-- **web/** — a multi-stage image that builds the frontend and serves it with nginx, proxying `/api` to the backend so it's all on **one origin** (passkeys require this)
+- **apps/api/** — Hono on Node, written in TypeScript and storing everything as plain JSON files under `./data`
+- **Dockerfile** + **web/nginx.conf** — a multi-stage image that builds the frontend and serves it with nginx, proxying `/api` to the backend so it's all on **one origin** (passkeys require this)
 
 ## Your data
 
@@ -211,7 +211,7 @@ Rough, community-driven — ideas and PRs welcome:
 
 ## Tech
 
-React 19 + Vite (React Router, Zustand) · Node (no framework) · nginx · Docker Compose ·
+TypeScript · React 19 + Vite (React Router, Zustand) · Hono on Node · nginx · Docker Compose ·
 WebAuthn · exercise data from [hasaneyldrm/exercises-dataset](https://github.com/hasaneyldrm/exercises-dataset).
 No database server, no cloud dependencies — the frontend builds inside Docker, so self-hosting
 stays a one-command `docker compose up`.

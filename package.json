@@ -2,18 +2,25 @@
   "name": "opengym",
   "version": "1.2.4",
   "private": true,
+  "type": "module",
   "packageManager": "pnpm@10.14.0",
   "scripts": {
     "dev": "turbo run dev --ui=stream",
     "mobile": "pnpm --filter opengym-mobile start",
-    "build": "turbo run build",
+    "build": "pnpm run check:typescript && turbo run build && pnpm run build:website",
+    "build:instructions": "node scripts/build-instructions.ts",
+    "build:website": "node scripts/build-website.ts",
+    "check:typescript": "node scripts/check-typescript-only.ts",
+    "typecheck": "tsc --noEmit -p tsconfig.json && tsc --noEmit -p website/tsconfig.json && turbo run typecheck",
     "test": "turbo run test",
     "test:watch": "turbo run test:watch"
   },
   "engines": {
-    "node": ">=20.19.0"
+    "node": ">=22.18.0"
   },
   "devDependencies": {
-    "turbo": "^2.10.11"
+    "@types/node": "^22.18.0",
+    "turbo": "^2.10.11",
+    "typescript": "~6.0.3"
   }
 }

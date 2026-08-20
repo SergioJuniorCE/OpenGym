@@ -6,7 +6,7 @@ use a WebView, or require a backend.
 
 ## Prerequisites
 
-- Node 22.13+ for Expo SDK 57
+- Node 22.18+ (the repository floor and Expo SDK 57 runtime)
 - pnpm 10+
 - **Android:** Android Studio, its SDK, and Java 21
 - **iOS:** macOS with Xcode 26.4+ and CocoaPods
@@ -17,6 +17,7 @@ From the repository root:
 
 ```sh
 pnpm install
+pnpm typecheck
 pnpm --filter opengym-mobile typecheck
 
 # Development server / Expo Go
@@ -50,7 +51,7 @@ system share sheet.
   Settings screens.
 
 The exercise catalogue remains shared with `apps/web`; Metro watches the workspace so there is one
-source of truth for exercise data.
+source of truth for exercise data. Its workspace configuration lives in `apps/mobile/metro.config.ts`.
 
 ## Native configuration
 
