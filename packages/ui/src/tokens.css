@@ -1,0 +1,82 @@
+/* Web token adapter. Native consumes the same values through native.css's
+   theme variables because UniWind parses @variant blocks at build time. */
+:root {
+  --og-bg: #000000;
+  --og-bg-el: #0e0e10;
+  --og-surface: #1c1c1e;
+  --og-surface-2: #2c2c2e;
+  --og-surface-3: #3a3a3c;
+  --og-label: #ffffff;
+  --og-label-2: rgba(235,235,245,.60);
+  --og-label-3: rgba(235,235,245,.32);
+  --og-label-4: rgba(235,235,245,.18);
+  --og-sep: rgba(84,84,88,.60);
+  --og-sep-op: rgba(84,84,88,.34);
+  --og-blue: #0a84ff;
+  --og-green: #30d158;
+  --og-red: #ff453a;
+  --og-orange: #ff9f0a;
+  --og-yellow: #ffd60a;
+  --og-teal: #40c8e0;
+  --og-indigo: #5e5ce6;
+  --og-pink: #ff375f;
+  --og-purple: #bf5af2;
+  --og-mint: #63e6e2;
+  --og-brown: #ac8e68;
+  --og-grey: #8e8e93;
+  --og-acc: var(--og-green);
+  --og-acc-2: #248a3d;
+  --og-on-acc: #000000;
+  --og-acc-soft: color-mix(in srgb, var(--og-acc) 16%, transparent);
+  --og-acc-line: color-mix(in srgb, var(--og-acc) 38%, transparent);
+  --og-r-sm: 8px;
+  --og-r: 12px;
+  --og-r-lg: 16px;
+  --og-r-xl: 22px;
+  --og-r-card: 14px;
+  --og-pad: 16px;
+}
+
+:root[data-theme="light"] {
+  --og-bg: #f2f2f7;
+  --og-bg-el: #f7f7fa;
+  --og-surface: #ffffff;
+  --og-surface-2: #ececef;
+  --og-surface-3: #e3e3e8;
+  --og-label: #000000;
+  --og-label-2: rgba(60,60,67,.60);
+  --og-label-3: rgba(60,60,67,.30);
+  --og-label-4: rgba(60,60,67,.16);
+  --og-sep: rgba(60,60,67,.29);
+  --og-sep-op: rgba(60,60,67,.20);
+  --og-blue: #007aff;
+  --og-green: #34c759;
+  --og-red: #ff3b30;
+  --og-orange: #ff9500;
+  --og-yellow: #ffcc00;
+  --og-teal: #30b0c7;
+  --og-indigo: #5856d6;
+  --og-pink: #ff2d55;
+  --og-purple: #af52de;
+  --og-mint: #00c7be;
+  --og-brown: #a2845e;
+  --og-grey: #8e8e93;
+  --og-acc-2: #248a3d;
+  --og-on-acc: #ffffff;
+}
+
+:root[data-accent="lime"] { --og-acc: var(--og-green); --og-acc-2: #248a3d; --og-on-acc: #000; }
+:root[data-accent="sky"] { --og-acc: var(--og-blue); --og-acc-2: #0060df; --og-on-acc: #fff; }
+:root[data-accent="orange"] { --og-acc: var(--og-orange); --og-acc-2: #c76b00; --og-on-acc: #000; }
+:root[data-accent="violet"] { --og-acc: var(--og-purple); --og-acc-2: #8944ab; --og-on-acc: #fff; }
+:root[data-accent="pink"] { --og-acc: var(--og-pink); --og-acc-2: #d70036; --og-on-acc: #fff; }
+:root[data-accent="red"] { --og-acc: var(--og-red); --og-acc-2: #d70015; --og-on-acc: #fff; }
+:root[data-accent="teal"] { --og-acc: var(--og-teal); --og-acc-2: #0071a4; --og-on-acc: #000; }
+:root[data-accent="gold"] { --og-acc: var(--og-yellow); --og-acc-2: #b25000; --og-on-acc: #000; }
+
+:root[data-theme="light"][data-accent="lime"],
+:root[data-theme="light"][data-accent="teal"] { --og-on-acc: #000; }
+:root[data-theme="light"][data-accent="sky"],
+:root[data-theme="light"][data-accent="violet"],
+:root[data-theme="light"][data-accent="pink"],
+:root[data-theme="light"][data-accent="red"] { --og-on-acc: #fff; }

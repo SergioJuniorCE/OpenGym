@@ -1,4 +1,5 @@
 const { getDefaultConfig } = require('expo/metro-config')
+const { withUniwindConfig } = require('uniwind/metro')
 const { join, resolve } = require('node:path')
 
 const config = getDefaultConfig(__dirname)
@@ -9,4 +10,7 @@ const workspaceRoot = resolve(__dirname, '../..')
 config.watchFolders = [workspaceRoot]
 config.resolver.nodeModulesPaths = [join(__dirname, 'node_modules'), join(workspaceRoot, 'node_modules')]
 
-module.exports = config
+module.exports = withUniwindConfig(config, {
+  cssEntryFile: './src/global.css',
+  dtsFile: './src/uniwind-types.d.ts',
+})

@@ -16,6 +16,9 @@
       140–220ms on an ease-out curve. Nothing bounces or slides for decoration.
    ========================================================================== */
 
+@import '@opengym/ui/tokens.css';
+@import '@opengym/ui/web.css';
+
 /* ---------------------------------------------------------------- tokens -- */
 :root {
   /* surfaces — dark is the default */
@@ -104,6 +107,22 @@
 :root[data-theme="light"][data-accent="violet"],
 :root[data-theme="light"][data-accent="pink"],
 :root[data-theme="light"][data-accent="red"]   { --on-acc:#fff }
+
+/* The legacy web selectors still use the short variable names below. Point
+   them at the package tokens so existing screens and the shared controls have
+   one palette and one theme/accent source. */
+:root {
+  --bg: var(--og-bg); --bg-el: var(--og-bg-el); --surface: var(--og-surface);
+  --surface-2: var(--og-surface-2); --surface-3: var(--og-surface-3);
+  --label: var(--og-label); --label-2: var(--og-label-2); --label-3: var(--og-label-3); --label-4: var(--og-label-4);
+  --sep: var(--og-sep); --sep-op: var(--og-sep-op);
+  --blue: var(--og-blue); --green: var(--og-green); --red: var(--og-red); --orange: var(--og-orange);
+  --yellow: var(--og-yellow); --teal: var(--og-teal); --indigo: var(--og-indigo); --pink: var(--og-pink);
+  --purple: var(--og-purple); --mint: var(--og-mint); --brown: var(--og-brown); --grey: var(--og-grey);
+  --acc: var(--og-acc); --acc-2: var(--og-acc-2); --on-acc: var(--og-on-acc);
+  --acc-soft: var(--og-acc-soft); --acc-line: var(--og-acc-line);
+  --r-sm: var(--og-r-sm); --r: var(--og-r); --r-lg: var(--og-r-lg); --r-xl: var(--og-r-xl); --r-card: var(--og-r-card); --pad: var(--og-pad);
+}
 
 /* ---------------------------------------------------------------- reset -- */
 *{margin:0;padding:0;box-sizing:border-box;-webkit-tap-highlight-color:transparent}

@@ -19,12 +19,20 @@ From the repository root:
 pnpm install
 pnpm --filter opengym-mobile typecheck
 
-# Development server / Expo Go or a development build
-pnpm --filter opengym-mobile start
+# Development server / Expo Go
+pnpm run mobile
 
 # Native builds (prebuild creates ignored android/ and ios directories)
 pnpm --filter opengym-mobile android
 pnpm --filter opengym-mobile ios       # macOS only
+```
+
+Expo Go is useful for developing the native UI. Android Expo Go cannot load the
+`expo-notifications` push-token module, so workout reminders are unavailable there; use a
+development build to test reminders:
+
+```sh
+pnpm --filter opengym-mobile android
 ```
 
 The app is standalone: no account, no sync, and no server. Workout state is stored in the app's

@@ -1,4 +1,5 @@
 import { EXDB as DATASET } from '../../web/src/lib/exercises-data.js'
+export { ACCENTS } from '@opengym/ui'
 
 export type Exercise = {
   id: string
@@ -86,11 +87,6 @@ export type AppState = {
 
 export const EXDB = DATASET as unknown as Exercise[]
 export const EXIDX = Object.fromEntries(EXDB.map(exercise => [exercise.id, exercise])) as Record<string, Exercise>
-
-export const ACCENTS: Record<string, string> = {
-  lime: '#30d158', sky: '#0a84ff', orange: '#ff9f0a', violet: '#bf5af2',
-  pink: '#ff375f', red: '#ff453a', teal: '#40c8e0', gold: '#ffd60a',
-}
 
 export const DEFAULT_STATE: AppState = {
   unit: 'kg', restSec: 90, sound: true, keepAwake: true, lang: 'en',

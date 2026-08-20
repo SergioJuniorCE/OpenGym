@@ -111,7 +111,7 @@ not use the browser app or a WebView:
 
 ```bash
 pnpm --filter opengym-mobile typecheck
-pnpm --filter opengym-mobile start
+pnpm run mobile
 
 # Native builds
 pnpm --filter opengym-mobile android

@@ -1,0 +1,8 @@
+@import 'tailwindcss';
+@import 'uniwind';
+@import '@opengym/ui/native.css';
+
+/* The entry file lives below the app root, so explicitly include both the
+   native screens and the workspace UI contract in Tailwind's scan graph. */
+@source "../";
+@source "../../../packages/ui/src";
