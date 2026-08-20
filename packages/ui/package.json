@@ -1,0 +1,18 @@
+{
+  "name": "@opengym/ui",
+  "private": true,
+  "version": "1.2.4",
+  "type": "module",
+  "exports": {
+    ".": "./src/index.ts",
+    "./classes": "./src/classes.ts",
+    "./tokens": "./src/tokens.ts",
+    "./tokens.css": "./src/tokens.css",
+    "./web.css": "./src/web.css",
+    "./native.css": "./src/native.css",
+    "./package.json": "./package.json"
+  },
+  "sideEffects": [
+    "*.css"
+  ]
+}

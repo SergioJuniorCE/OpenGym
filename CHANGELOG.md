@@ -238,7 +238,7 @@ openGym is also a standalone mobile app — and it ships as a direct APK downloa
 through app stores.
 
 - 📱 **Standalone mobile app.** The same frontend now also builds as a native iPhone /
-  Android app (Capacitor) — the install-and-done flavor of openGym: no account, no server,
+  Android app (Expo) — the install-and-done flavor of openGym: no account, no server,
   no sync. Everything stays on the phone.
   - State is mirrored into a file in the app's private storage on every change, so your
     log survives even when the OS evicts WebView storage (iOS does).
@@ -246,8 +246,8 @@ through app stores.
     your plan actually has a routine — no push server involved.
   - Backups go out through the OS **share sheet** (Files, AirDrop, mail…).
   - Exercise images/animations load from the same CDN as the live demo.
-  - `npm run build:mobile`, then open `android/` in Android Studio or `ios/` in Xcode —
-    see **docs/MOBILE.md**. `NOTICE.md` now carries an AGPL §7 app-store exception.
+  - `pnpm build:mobile`, then run `pnpm --filter opengym-mobile android` or `ios` — see
+    **docs/MOBILE.md**. `NOTICE.md` now carries an AGPL §7 app-store exception.
 - 🤖 **Android APK, no Play Store.** The official build is a signed, sideloadable APK
   (~4.5 MB) from [opengym.duarte-santos.ch](https://opengym.duarte-santos.ch) — deliberately
   store-free. docs/MOBILE.md covers building and signing your own.

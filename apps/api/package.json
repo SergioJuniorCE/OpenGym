@@ -6,7 +6,7 @@
   "main": "server.js",
   "license": "AGPL-3.0-or-later",
   "scripts": {
-    "dev": "node --watch server.js",
+    "dev": "node --env-file=.env --watch server.js",
     "build": "node --check server.js",
     "start": "node server.js"
   },

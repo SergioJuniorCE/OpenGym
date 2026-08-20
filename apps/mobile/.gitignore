@@ -1,0 +1,5 @@
+.expo/
+.expo-export*/
+.expo-native-export/
+android/
+ios/

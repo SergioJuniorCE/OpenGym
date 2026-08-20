@@ -14,6 +14,7 @@
 //   · focus-visible draws a ring; pointer interaction never does
 
 import { useRef, useState, useEffect, useCallback, forwardRef } from 'react'
+import { uiClasses } from '@opengym/ui'
 import Icon from './Icon.jsx'
 
 /* ============================ text ============================ */
@@ -41,7 +42,7 @@ export function NumberField({ value, onChange, decimal = true, nullable = false,
     <input
       type="text"
       inputMode={decimal ? 'decimal' : 'numeric'}
-      className={'num ' + className}
+      className={`${uiClasses.input} num ${className}`}
       value={draft ?? (value ?? '')}
       onFocus={e => e.target.select()}
       onChange={e => commit(e.target.value)}
@@ -53,18 +54,18 @@ export function NumberField({ value, onChange, decimal = true, nullable = false,
 
 // forwardRef so callers can focus it or read its value imperatively
 export const TextField = forwardRef(function TextField({ className = '', ...rest }, ref) {
-  return <input ref={ref} className={'field ' + className} {...rest} />
+  return <input ref={ref} className={`${uiClasses.input} field ${className}`} {...rest} />
 })
 
 export function TextArea({ className = '', ...rest }) {
-  return <textarea className={'field area ' + className} {...rest} />
+  return <textarea className={`${uiClasses.input} field area ${className}`} {...rest} />
 }
 
 export function SearchField({ value, onChange, onClear, ...rest }) {
   return (
-    <div className="searchf">
+    <div className={`searchf ${uiClasses.fieldGroup}`}>
       <Icon name="magnifier" className="lead" />
-      <input className="field" value={value} onChange={onChange} {...rest} />
+      <input className={`${uiClasses.input} field`} value={value} onChange={onChange} {...rest} />
       {!!value && (
         <button className="clear" onClick={onClear} aria-label="Clear">
           <Icon name="xmark" />
@@ -82,10 +83,10 @@ export function Switch({ checked, onChange, disabled }) {
       role="switch"
       aria-checked={!!checked}
       disabled={disabled}
-      className={'sw' + (checked ? ' on' : '')}
+      className={`sw ${uiClasses.toggle}${checked ? ' on ' + uiClasses.toggleOn : ''}`}
       onClick={() => onChange(!checked)}
     >
-      <span className="knob" />
+      <span className={uiClasses.toggleKnob + ' knob'} />
     </button>
   )
 }
@@ -96,17 +97,17 @@ export function Switch({ checked, onChange, disabled }) {
 export function Segmented({ options, value, onChange, className = '' }) {
   const i = Math.max(0, options.findIndex(o => o.value === value))
   return (
-    <div className={'seg ' + className} style={{ '--n': options.length, '--i': i }}>
+    <div className={`${uiClasses.segmented} seg ${className}`} style={{ '--n': options.length, '--i': i }}>
       <span className="seg-sel" aria-hidden="true" />
       {options.map(o => (
         <button
           key={o.value}
-          className={o.value === value ? 'on' : ''}
+          className={`${uiClasses.segmentedOption}${o.value === value ? ' on ' + uiClasses.segmentedSelected : ''}`}
           aria-pressed={o.value === value}
           onClick={() => onChange(o.value)}
         >
           {o.icon && <Icon name={o.icon} />}
-          {o.label && <span>{o.label}</span>}
+          {o.label && <span className={o.value === value ? uiClasses.segmentedTextSelected : uiClasses.segmentedText}>{o.label}</span>}
         </button>
       ))}
     </div>
@@ -118,7 +119,7 @@ export function Segmented({ options, value, onChange, className = '' }) {
 export function Stepper({ value, step = 1, onChange, decimal = true, className = '', label, unit }) {
   const set = v => onChange(Math.max(0, Math.round((v || 0) * 100) / 100))
   const inner = (
-    <div className={'stp ' + className}>
+      <div className={'stp ' + className}>
       <button onClick={() => set((+value || 0) - step)} aria-label="Decrease"><Icon name="minus" /></button>
       <span className="val">
         <NumberField value={value} decimal={decimal} onChange={onChange} />
@@ -217,7 +218,7 @@ export function Check({ checked, onChange, className = '', size }) {
 // edge, so the icon column reads as a continuous rail.
 export function Section({ title, footer, children, className = '' }) {
   return (
-    <section className={'sect ' + className}>
+    <section className={`${uiClasses.section} sect ${className}`}>
       {title && <h2 className="sect-t">{title}</h2>}
       <div className="sect-b">{children}</div>
       {footer && <p className="sect-f">{footer}</p>}
@@ -228,11 +229,11 @@ export function Section({ title, footer, children, className = '' }) {
 export function Row({ icon, iconTint, title, subtitle, value, accessory = 'none', onClick, danger, children, className = '' }) {
   const Tag = onClick ? 'button' : 'div'
   return (
-    <Tag className={'lrow' + (onClick ? ' tap' : '') + (danger ? ' danger' : '') + ' ' + className} onClick={onClick}>
-      {icon && <span className="lrow-i" style={iconTint ? { '--tint': iconTint } : null}><Icon name={icon} /></span>}
-      <span className="lrow-m">
-        <span className="lrow-t">{title}</span>
-        {subtitle && <span className="lrow-s">{subtitle}</span>}
+    <Tag className={`${uiClasses.listRow} lrow${onClick ? ' tap' : ''}${danger ? ' danger' : ''} ${className}`} onClick={onClick}>
+      {icon && <span className={`${uiClasses.listIcon} lrow-i`} style={iconTint ? { '--tint': iconTint } : null}><Icon name={icon} /></span>}
+      <span className={uiClasses.listMain + ' lrow-m'}>
+        <span className={uiClasses.listTitle + ' lrow-t'}>{title}</span>
+        {subtitle && <span className={uiClasses.listSubtitle + ' lrow-s'}>{subtitle}</span>}
       </span>
       {children}
       {value != null && <span className="lrow-v">{value}</span>}
@@ -257,9 +258,9 @@ export function SelectRow({ icon, iconTint, title, value, options, onChange, she
         <h3>{sheetTitle || title}</h3>
         <div className="sect-b">
           {options.map(o => (
-            <button key={o.value} className="lrow tap" onClick={() => { close(); onChange(o.value) }}>
-              <span className="lrow-m"><span className="lrow-t">{o.label}</span>
-                {o.subtitle && <span className="lrow-s">{o.subtitle}</span>}</span>
+            <button key={o.value} className={`${uiClasses.listRow} lrow tap`} onClick={() => { close(); onChange(o.value) }}>
+              <span className={uiClasses.listMain + ' lrow-m'}><span className={uiClasses.listTitle + ' lrow-t'}>{o.label}</span>
+                {o.subtitle && <span className={uiClasses.listSubtitle + ' lrow-s'}>{o.subtitle}</span>}</span>
               {o.value === value && <Icon name="check" className="lrow-k" />}
             </button>
           ))}
@@ -287,7 +288,7 @@ function require_ui() {
 
 export function Button({ variant = 'plain', size, icon, trailingIcon, children, className = '', ...rest }) {
   return (
-    <button className={`btn ${variant}${size ? ' ' + size : ''} ${className}`} {...rest}>
+    <button className={`${uiClasses.button} btn ${variant}${size ? ' ' + size : ''}${size === 'sm' ? ' ' + uiClasses.buttonCompact : ''} ${className}`} {...rest}>
       {icon && <Icon name={icon} />}
       {children && <span>{children}</span>}
       {trailingIcon && <Icon name={trailingIcon} />}

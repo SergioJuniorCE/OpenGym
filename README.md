@@ -57,7 +57,7 @@ as a home-screen app, passkey sign-in, offline support, sync across your phone a
 ## Features
 
 - ⚖️ **Body-weight tracking** — interactive chart with a goal line you set, gains/losses colored by whether they move toward it
-- 🏋️ **Weekly plan** — a routine per weekday, over a library of **1,324 exercises** (searchable, with animated demos)
+- 🏋️ **Weekly plan** — a routine per weekday, over a library of **1,324 exercises** (searchable, with animated demos), sourced from [`hasaneyldrm/exercises-dataset`](https://github.com/hasaneyldrm/exercises-dataset)
 - 🗓️ **Reschedule any day** — sick, missed a session, or fewer gym days this week? Move a workout to another day without touching your weekly plan
 - ▶️ **Guided workouts** — it knows what day it is and starts today's session; asks your body weight first, pre-fills your weights from last time, rest timer, PR detection, per-exercise weight tracking
 - ☀️ **The screen stays awake while you train** — no unlocking the phone and finding your place again between every set. On for as long as a workout is running, released the moment you finish it, and switchable off in Settings
@@ -85,16 +85,40 @@ as a home-screen app, passkey sign-in, offline support, sync across your phone a
 
 ## Local development
 
-The repository is a pnpm workspace managed by Turborepo. With Node 20.19+ and pnpm 10 installed:
+The repository is a pnpm workspace managed by Turborepo. Install Node 20.19+ and pnpm 10 first
+(Node 22.13+ is required for the Expo mobile app).
 
 ```bash
 pnpm install
-pnpm dev
+cp apps/api/.env.example apps/api/.env
+cp apps/web/.env.example apps/web/.env
+pnpm run dev
 ```
 
-This starts the API and Vite frontend together at **http://localhost:5173**, stores development
-data in `data-dev/`, and loads exercise media from the pinned upstream CDN. Run `pnpm test` for the
+On Windows PowerShell, use `Copy-Item apps/api/.env.example apps/api/.env` and
+`Copy-Item apps/web/.env.example apps/web/.env` instead of `cp`.
+
+This starts the API on **http://localhost:3000** and the Vite frontend on
+**http://localhost:5173**, stores development data in `data-dev/`, and loads exercise media from
+the pinned upstream CDN. The API and frontend each read their own ignored `.env` file; the root
+`.env.example` is for Docker self-hosting, not this local workflow. Run `pnpm test` for the
 frontend logic tests or `pnpm build` for the workspace build.
+
+### Native mobile development
+
+The mobile app is a standalone native Expo app. It does not run as part of `pnpm run dev` and does
+not use the browser app or a WebView:
+
+```bash
+pnpm --filter opengym-mobile typecheck
+pnpm run mobile
+
+# Native builds
+pnpm --filter opengym-mobile android
+pnpm --filter opengym-mobile ios       # macOS only
+```
+
+See [docs/MOBILE.md](docs/MOBILE.md) for Expo prerequisites, native configuration, and EAS builds.
 
 ## Quick start (self-host)
 
@@ -118,7 +142,7 @@ a build step locally either way.
 
 ## Mobile app (no server at all)
 
-The same codebase also builds a **standalone mobile app** (Capacitor): no account, no sync,
+The same codebase also builds a **standalone mobile app** (Expo): no account, no sync,
 no backend — everything stays on the phone, with native workout-day reminders and share-sheet
 backups. Self-hosting gets you multi-device sync and profiles for friends & family; the
 mobile app is the install-and-done flavor.

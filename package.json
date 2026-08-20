@@ -4,11 +4,11 @@
   "private": true,
   "packageManager": "pnpm@10.14.0",
   "scripts": {
-    "dev": "node scripts/dev.mjs",
+    "dev": "turbo run dev --ui=stream",
+    "mobile": "pnpm --filter opengym-mobile start",
     "build": "turbo run build",
     "test": "turbo run test",
-    "test:watch": "turbo run test:watch",
-    "build:mobile": "turbo run build:mobile --filter=opengym-frontend"
+    "test:watch": "turbo run test:watch"
   },
   "engines": {
     "node": ">=20.19.0"
