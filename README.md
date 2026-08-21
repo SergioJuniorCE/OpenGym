@@ -57,7 +57,7 @@ as a home-screen app, passkey or email/password sign-in, offline support, sync a
 ## Features
 
 - ⚖️ **Body-weight tracking** — interactive chart with a goal line you set, gains/losses colored by whether they move toward it
-- 🏋️ **Weekly plan** — a routine per weekday, over a library of **1,324 exercises** (searchable, with animated demos), sourced from [`hasaneyldrm/exercises-dataset`](https://github.com/hasaneyldrm/exercises-dataset)
+- 🏋️ **Weekly and four-week plans** — repeat a routine by weekday or build four different weeks that loop, over a library of **1,324 exercises** (searchable, with animated demos), sourced from [`hasaneyldrm/exercises-dataset`](https://github.com/hasaneyldrm/exercises-dataset)
 - 🗓️ **Reschedule any day** — sick, missed a session, or fewer gym days this week? Move a workout to another day without touching your weekly plan
 - ▶️ **Guided workouts** — it knows what day it is and starts today's session; asks your body weight first, pre-fills your weights from last time, rest timer, PR detection, per-exercise weight tracking
 - ☀️ **The screen stays awake while you train** — no unlocking the phone and finding your place again between every set. On for as long as a workout is running, released the moment you finish it, and switchable off in Settings
@@ -69,7 +69,7 @@ as a home-screen app, passkey or email/password sign-in, offline support, sync a
 - 💪 **Bodyweight exercises, logged as bodyweight** — push-ups, pull-ups, dips and 300-odd others arrive knowing they carry no load, so there's no weight column and no working-weight prompt: one stepper, log the reps. Add a dip belt and it reads as an addition, and progression goes back to following the weight. Without one, reps climb — and past a ceiling you set, a set is added instead of a rep, up to the point where the honest advice is load or a harder variation
 - ↔️ **Reps per side** — for lunges, single-arm rows and the rest. You log the total, the app shows the split ("8 per side"), and the target steps in twos so it never lands on a number one side can't have
 - 🏃 **Cardio** — log time + speed, not just weight × reps
-- 📤 **Share a plan** — send someone your routines and week schedule as a small file (no workouts, no weigh-ins), or print it as a clean PDF. Importing merges, so their plan is never overwritten
+- 📤 **Share a plan** — send someone your routines and weekly/four-week schedule as a small file (no workouts, no weigh-ins), or print it as a clean PDF. Importing merges, so their plan is never overwritten
 - 🔧 **Filter by equipment** — narrow the library to what you actually own; the options adapt to what you've picked, so every combination on screen has results behind it
 - ✨ **Your own exercises** — a name and a body part is enough; they behave like built-in ones everywhere, with an optional description instead of an animation
 - 🟩 **Activity heatmap** — a GitHub-style year view, shaded by time spent training

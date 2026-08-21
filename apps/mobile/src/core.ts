@@ -75,6 +75,8 @@ export type AppState = {
   bodyweight: Array<{ d: string; w: number }>
   routines: Routine[]
   week: Record<string, string>
+  cyclePlan: Record<string, Record<string, string>>
+  cycleStart: string
   dayPlan: Record<string, unknown>
   exWeights: Record<string, number>
   workouts: Workout[]
@@ -91,7 +93,7 @@ export const EXIDX = Object.fromEntries(EXDB.map(exercise => [exercise.id, exerc
 export const DEFAULT_STATE: AppState = {
   unit: 'kg', restSec: 90, sound: true, keepAwake: true, lang: 'en',
   theme: 'dark', accent: 'lime', body: 'male', targetW: null,
-  bodyweight: [], routines: [], week: {}, dayPlan: {}, exWeights: {}, workouts: [],
+  bodyweight: [], routines: [], week: {}, cyclePlan: {}, cycleStart: '', dayPlan: {}, exWeights: {}, workouts: [],
   active: null, customEx: [], gifSize: 'full', reminder: { on: false, time: '08:00', tz: null }, effort: null,
 }
 
@@ -107,6 +109,8 @@ export function normalizeState(value: unknown): AppState {
     customEx: Array.isArray(saved.customEx) ? saved.customEx : [],
     bodyweight: Array.isArray(saved.bodyweight) ? saved.bodyweight : [],
     week: saved.week && typeof saved.week === 'object' ? saved.week : {},
+    cyclePlan: saved.cyclePlan && typeof saved.cyclePlan === 'object' ? saved.cyclePlan : {},
+    cycleStart: typeof saved.cycleStart === 'string' ? saved.cycleStart : '',
     reminder: { ...DEFAULT_STATE.reminder, ...(saved.reminder || {}) },
   }
 }
@@ -120,6 +124,47 @@ export const todayISO = (): string => {
 
 export const isoOf = (date: Date): string =>
   `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}-${String(date.getDate()).padStart(2, '0')}`
+
+export const CYCLE_WEEKS = [1, 2, 3, 4] as const
+export const WEEK_ORDER = [1, 2, 3, 4, 5, 6, 0] as const
+
+export function copyWeekToCycle(week: Record<string, string>): Record<string, Record<string, string>> {
+  return Object.fromEntries(CYCLE_WEEKS.map(cycleWeek => [
+    String(cycleWeek),
+    Object.fromEntries(WEEK_ORDER.map(day => [String(day), week[String(day)] || 'rest'])),
+  ]))
+}
+
+export function copyCycleWeekToAll(cyclePlan: Record<string, Record<string, string>> | undefined, sourceWeek: number): Record<string, Record<string, string>> {
+  const source = cyclePlan?.[String(sourceWeek)] || {}
+  return Object.fromEntries(CYCLE_WEEKS.map(cycleWeek => [String(cycleWeek), { ...source }]))
+}
+
+export function copyCycleWeekTo(cyclePlan: Record<string, Record<string, string>> | undefined, sourceWeek: number, targetWeek: number): Record<string, Record<string, string>> {
+  return { ...(cyclePlan || {}), [String(targetWeek)]: { ...(cyclePlan?.[String(sourceWeek)] || {}) } }
+}
+
+function dayNumber(iso: string): number {
+  const [year, month, day] = iso.split('-').map(Number)
+  return Math.floor(Date.UTC(year, month - 1, day) / 86400000)
+}
+
+export function mondayISO(iso: string): string {
+  const date = new Date(`${iso}T12:00:00`)
+  if (Number.isNaN(date.getTime())) return iso
+  date.setDate(date.getDate() - ((date.getDay() + 6) % 7))
+  return isoOf(date)
+}
+
+export function defaultCycleStart(date = new Date()): string {
+  return mondayISO(isoOf(date))
+}
+
+export function cycleWeekForDate(iso: string, cycleStart = ''): number {
+  const start = mondayISO(cycleStart || defaultCycleStart())
+  const elapsedWeeks = Math.floor((dayNumber(iso) - dayNumber(start)) / 7)
+  return ((elapsedWeeks % 4) + 4) % 4 + 1
+}
 
 export const exerciseOf = (id: string): Exercise =>
   EXIDX[id] || { id, n: 'Unknown exercise', bp: '', eq: '', tg: '' }
@@ -151,6 +196,25 @@ export const starterRoutines = (): Routine[] => [
 export function routineForDay(state: AppState, day = new Date().getDay()): Routine | null {
   const routineId = state.week[String(day)]
   return state.routines.find(routine => routine.id === routineId) || state.routines[0] || null
+}
+
+export function routineForDate(state: AppState, date: Date): Routine | null {
+  const iso = isoOf(date)
+  const dayOverride = state.dayPlan[iso]
+  if (dayOverride === 'rest') return null
+  if (typeof dayOverride === 'string') {
+    const routine = state.routines.find(item => item.id === dayOverride)
+    if (routine) return routine
+  }
+  const cycleWeek = cycleWeekForDate(iso, state.cycleStart)
+  const cycleValue = state.cyclePlan[String(cycleWeek)]?.[String(date.getDay())]
+  if (cycleValue === 'rest') return null
+  if (cycleValue) {
+    const routine = state.routines.find(item => item.id === cycleValue)
+    if (routine) return routine
+  }
+  const weekly = state.week[String(date.getDay())]
+  return state.routines.find(item => item.id === weekly) || null
 }
 
 export function routineVolume(routine: Routine): number {

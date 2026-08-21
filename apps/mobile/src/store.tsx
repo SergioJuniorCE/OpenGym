@@ -46,7 +46,7 @@ export function NativeProvider({ children }: PropsWithChildren) {
     const next = normalizeState(JSON.parse(JSON.stringify(state)))
     updater(next)
     commit(next)
-    const scheduleChanged = JSON.stringify(state.week) !== JSON.stringify(next.week) || JSON.stringify(state.routines) !== JSON.stringify(next.routines)
+    const scheduleChanged = JSON.stringify(state.week) !== JSON.stringify(next.week) || JSON.stringify(state.cyclePlan) !== JSON.stringify(next.cyclePlan) || state.cycleStart !== next.cycleStart || JSON.stringify(state.routines) !== JSON.stringify(next.routines)
     if (scheduleChanged) void syncNativeReminders(next).catch(() => undefined)
   }
 

@@ -80,7 +80,9 @@ interface PersistedState {
   _ts?: unknown;
   unit?: unknown;
   dayPlan?: Record<string, string>;
-  week?: Array<string | null>;
+  cyclePlan?: Record<string, Record<string, string>>;
+  cycleStart?: string;
+  week?: Record<string, string | null>;
   routines?: Routine[];
   workouts?: Workout[];
   bodyweight?: unknown[];
@@ -370,6 +372,18 @@ export async function createApp(environment: NodeJS.ProcessEnv = process.env): P
     const override = state.dayPlan?.[isoDate];
     if (override === 'rest') return null;
     if (override && state.routines?.some((routine) => routine.id === override)) return override;
+    const dayNumber = (iso: string): number => {
+      const [year = 0, month = 1, day = 1] = iso.split('-').map(Number);
+      return Math.floor(Date.UTC(year, month - 1, day) / 86400000);
+    };
+    const startDate = new Date(`${state.cycleStart || isoDate}T12:00:00`);
+    startDate.setDate(startDate.getDate() - ((startDate.getDay() + 6) % 7));
+    const cycleStart = `${startDate.getFullYear()}-${String(startDate.getMonth() + 1).padStart(2, '0')}-${String(startDate.getDate()).padStart(2, '0')}`;
+    const elapsedWeeks = Math.floor((dayNumber(isoDate) - dayNumber(cycleStart)) / 7);
+    const cycleWeek = ((elapsedWeeks % 4) + 4) % 4 + 1;
+    const cycleValue = state.cyclePlan?.[String(cycleWeek)]?.[String(new Date(`${isoDate}T12:00:00`).getDay())];
+    if (cycleValue === 'rest') return null;
+    if (cycleValue && state.routines?.some((routine) => routine.id === cycleValue)) return cycleValue;
     const weekday = new Date(`${isoDate}T12:00:00`).getDay();
     return state.week?.[weekday] || null;
   };

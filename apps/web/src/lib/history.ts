@@ -2,6 +2,7 @@
 import { todayISO, isoOf, weekKey, fmtNum } from './format'
 import { isCardio, isBodyweightEq } from './exercises'
 import { t } from './i18n'
+import { cycleAssignment, REST_DAY } from './planning'
 
 // How an exercise is logged (issue #16). This used to be derived from the body part alone,
 // which meant a plank or a farmer's carry could only be timed by filing it under cardio.
@@ -159,11 +160,14 @@ export function bestWeightFor(S, exId) {
   return best
 }
 export function effectiveRoutineId(S, iso) {
-  const ov = S.dayPlan[iso]
+  const ov = S.dayPlan?.[iso]
   if (ov === 'rest') return null
   if (ov && S.routines.some(r => r.id === ov)) return ov
+  const cycle = cycleAssignment(S.cyclePlan, iso, S.cycleStart)
+  if (cycle === REST_DAY) return null
+  if (cycle && S.routines.some(r => r.id === cycle)) return cycle
   const wd = new Date(iso + 'T12:00:00').getDay()
-  return S.week[wd] || null
+  return S.week?.[wd] || null
 }
 export function effectiveRoutine(S, iso) {
   const id = effectiveRoutineId(S, iso)

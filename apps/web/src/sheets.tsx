@@ -19,6 +19,7 @@ import { parseImport, mergeImport } from './lib/import-csv'
 import { buildPlanBundle, parsePlan, mergePlan, printPlan } from './lib/plan-share'
 import { estimate1RM, best1RM, is1RMRecord, REP_CAP } from './lib/onerm'
 import { nextPrescription, applyPrescription, policyFor, defaultIncrement, POLICIES_FOR, POLICY_NAME, POLICY_DESC, MAX_BW_SETS } from './lib/progression'
+import { CYCLE_WEEKS, REST_DAY, copyCycleWeekTo, copyCycleWeekToAll, cycleAssignment, defaultCycleStart } from './lib/planning'
 
 const S = () => useStore.getState().S
 const update = (...a) => useStore.getState().update(...a)
@@ -653,7 +654,7 @@ function PlanTools({ close }: any) {
 
   return <>
     <h3>{t('Share your plan')}</h3>
-    <div className="muted small" style={{ marginBottom: 16 }}>{t('Send your routines to a friend, or put your week on paper.')}</div>
+    <div className="muted small" style={{ marginBottom: 16 }}>{t('Send your routines to a friend, or put your weekly and four-week plan on paper.')}</div>
     <Button variant="primary" icon="upload" onClick={exportFile} disabled={!hasRoutines}>{t('Export plan file')}</Button>
     <div className="dim small" style={{ margin: '7px 2px 0', lineHeight: 1.4 }}>{t('A small file a friend imports into their own openGym — routines only, none of your workouts or weigh-ins.')}</div>
     <>
@@ -694,7 +695,7 @@ function PlanImport({ bundle, close }: any) {
         : '{0} exercises in the file aren’t in your library and were left out.', bundle.dropped)}
     </div>}
     {bundle.scheduledDays > 0 && <div className="row between" style={{ padding: '10px 2px', borderTop: '1px solid var(--sep)', borderBottom: '1px solid var(--sep)', marginBottom: 16, gap: 12 }}>
-      <div><div className="tt" style={{ fontSize: 15 }}>{t('Use this weekly schedule')}</div><div className="small dim">{t('Replaces your current Mon–Sun assignments.')}</div></div>
+      <div><div className="tt" style={{ fontSize: 15 }}>{t('Use this schedule')}</div><div className="small dim">{t('Replaces your current weekly and four-week assignments.')}</div></div>
       <Switch checked={schedule} onChange={setSchedule} />
     </div>}
     <Button variant="primary" onClick={apply}>{t('Add to my plan')}</Button>
@@ -707,28 +708,115 @@ function PlanImport({ bundle, close }: any) {
 function DayOverride({ iso, close }: any) {
   const st = useStore(s => s.S)
   const wd = new Date(iso + 'T12:00:00').getDay()
-  const weeklyR = st.routines.find(r => r.id === st.week[wd])
+  const cycle = cycleAssignment(st.cyclePlan, iso, st.cycleStart)
+  const cycleRoutine = cycle && cycle !== REST_DAY ? st.routines.find(r => r.id === cycle) : null
+  const cycleActive = cycle === REST_DAY || !!cycleRoutine
+  const baselineRoutine = cycleActive ? cycleRoutine : st.routines.find(r => r.id === st.week[wd])
   const hasOvr = st.dayPlan[iso] !== undefined
   const effId = effectiveRoutineId(st, iso)
   const set = v => {
     update(s => { if (!v) delete s.dayPlan[iso]; else s.dayPlan[iso] = v })
     close()
-    toast(v === '' ? t('Back to weekly plan') : v === 'rest' ? t('{0} set to rest', fmtDate(iso)) : t('{0} planned for {1}', (st.routines.find(r => r.id === v) || {}).name, fmtDate(iso)))
+    toast(v === '' ? t('Back to plan') : v === 'rest' ? t('{0} set to rest', fmtDate(iso)) : t('{0} planned for {1}', (st.routines.find(r => r.id === v) || {}).name, fmtDate(iso)))
   }
   return <>
     <h3>{fmtDate(iso, true)}</h3>
-    <div className="muted small" style={{ marginBottom: 12 }}>{t('Weekly plan:')} {weeklyR ? weeklyR.name : t('Rest')}{hasOvr && <span style={{ color: 'var(--orange)' }}> · {t('changed for this day')}</span>}<br />{t('Sick, missed a day or want a different session? Pick what to train instead.')}</div>
+    <div className="muted small" style={{ marginBottom: 12 }}>{cycleActive ? t('4-week cycle:') : t('Weekly plan:')} {baselineRoutine ? baselineRoutine.name : t('Rest')}{hasOvr && <span style={{ color: 'var(--orange)' }}> · {t('changed for this day')}</span>}<br />{t('Sick, missed a day or want a different session? Pick what to train instead.')}</div>
     <div className="list">
       {st.routines.map(r => <div key={r.id} className="item" onClick={() => set(r.id)}>
         <span className="lrow-i"><Icon name={glyphOf(r.emoji)} /></span>
         <div className="grow"><div className="tt">{r.name}</div><div className="ss">{exCount(r.ex.length)}</div></div>
         {effId === r.id && <Icon name="check" className="accent" />}</div>)}
       <div className="item" onClick={() => set('rest')}><span className="lrow-i" style={{ background: 'var(--surface-3)' }}><Icon name="moon" /></span><div className="grow"><div className="tt">{t('Rest / skip this day')}</div></div>{effId === null && <Icon name="check" className="accent" />}</div>
-      {hasOvr && <div className="item" onClick={() => set('')}><span className="lrow-i" style={{ background: 'var(--surface-3)' }}><Icon name="reset" /></span><div className="grow"><div className="tt">{t('Back to weekly plan')}</div></div></div>}
+      {hasOvr && <div className="item" onClick={() => set('')}><span className="lrow-i" style={{ background: 'var(--surface-3)' }}><Icon name="reset" /></span><div className="grow"><div className="tt">{t('Back to plan')}</div></div></div>}
     </div>
   </>
 }
 export const dayOverrideSheet = iso => ui().openSheet(close => <DayOverride iso={iso} close={close} />)
+
+/* ============================ four-week cycle assignment ============================ */
+function CycleDayAssign({ cycleWeek, day, close }: any) {
+  const st = useStore(s => s.S)
+  const cycle = st.cyclePlan?.[String(cycleWeek)]?.[String(day)]
+  const weeklyId = st.week?.[day]
+  const cycleRoutine = cycle && cycle !== REST_DAY ? st.routines.find(routine => routine.id === cycle) : null
+  const set = (value: string) => {
+    update(s => {
+      s.cyclePlan = s.cyclePlan || {}
+      s.cycleStart = s.cycleStart || defaultCycleStart()
+      s.cyclePlan[String(cycleWeek)] = s.cyclePlan[String(cycleWeek)] || {}
+      if (value) s.cyclePlan[String(cycleWeek)][String(day)] = value
+      else delete s.cyclePlan[String(cycleWeek)][String(day)]
+    })
+    close()
+    toast(value === ''
+      ? t('{0} is using the weekly plan', `${t('Week')} ${cycleWeek} · ${t(DAYN[day])}`)
+      : value === REST_DAY
+        ? t('{0} set to rest', `${t('Week')} ${cycleWeek} · ${t(DAYN[day])}`)
+        : t('{0} planned for {1}', (st.routines.find(r => r.id === value) || {}).name, `${t('Week')} ${cycleWeek} · ${t(DAYN[day])}`))
+  }
+  return <>
+    <h3>{t('Week')} {cycleWeek} · {t(DAYN[day])}</h3>
+    <div className="muted small" style={{ marginBottom: 12 }}>
+      {t('4-week cycle:')} {cycle === REST_DAY ? t('Rest') : cycleRoutine ? cycleRoutine.name : weeklyId ? `${(st.routines.find(r => r.id === weeklyId) || {}).name} · ${t('weekly')}` : t('Rest')}
+    </div>
+    <div className="list">
+      <button type="button" className="item" onClick={() => set('')}>
+        <span className="lrow-i" style={{ background: 'var(--surface-3)' }}><Icon name="reset" /></span>
+        <div className="grow"><div className="tt">{t('Use weekly plan')}</div><div className="ss">{t('Follow the recurring weekday schedule.')}</div></div>
+        {!cycle && <Icon name="check" className="accent" />}
+      </button>
+      {st.routines.map(r => <button type="button" key={r.id} className="item" onClick={() => set(r.id)}>
+        <span className="lrow-i"><Icon name={glyphOf(r.emoji)} /></span>
+        <div className="grow"><div className="tt">{r.name}</div><div className="ss">{exCount(r.ex.length)}</div></div>
+        {cycle === r.id && <Icon name="check" className="accent" />}
+      </button>)}
+      <button type="button" className="item" onClick={() => set(REST_DAY)}>
+        <span className="lrow-i" style={{ background: 'var(--surface-3)' }}><Icon name="moon" /></span>
+        <div className="grow"><div className="tt">{t('Rest day')}</div></div>
+        {cycle === REST_DAY && <Icon name="check" className="accent" />}
+      </button>
+    </div>
+  </>
+}
+export const cycleDayAssignSheet = (cycleWeek, day) => ui().openSheet(close => <CycleDayAssign cycleWeek={cycleWeek} day={day} close={close} />)
+
+/* ============================ four-week cycle copy ============================ */
+function CycleCopy({ sourceWeek, close }: { sourceWeek: number; close: () => void }) {
+  const copyToWeek = (targetWeek: number) => {
+    update(s => {
+      s.cyclePlan = copyCycleWeekTo(s.cyclePlan, sourceWeek, targetWeek)
+      s.cycleStart = s.cycleStart || defaultCycleStart()
+    })
+    close()
+    toast(t('{0} copied to {1}', `${t('Week')} ${sourceWeek}`, `${t('Week')} ${targetWeek}`))
+  }
+  const copyToAll = () => {
+    update(s => {
+      s.cyclePlan = copyCycleWeekToAll(s.cyclePlan, sourceWeek)
+      s.cycleStart = s.cycleStart || defaultCycleStart()
+    })
+    close()
+    toast(t('{0} copied to all four weeks', `${t('Week')} ${sourceWeek}`))
+  }
+
+  return <>
+    <h3>{t('Copy this week plan')}</h3>
+    <div className="muted small" style={{ marginBottom: 14 }}>{t('{0} is the source. Choose another week, or copy it to all four weeks.', `${t('Week')} ${sourceWeek}`)}</div>
+    <div className="list">
+      {CYCLE_WEEKS.filter(week => week !== sourceWeek).map(week => <button type="button" key={week} className="item" onClick={() => copyToWeek(week)}>
+        <span className="lrow-i" style={{ background: 'var(--surface-3)' }}><Icon name="calendar" /></span>
+        <div className="grow"><div className="tt">{t('Copy to Week {0}', week)}</div><div className="ss">{t('Replace that week plan')}</div></div>
+        <Icon name="chevronRight" className="chev" />
+      </button>)}
+    </div>
+    <div style={{ height: 12 }} />
+    <Button variant="tinted" icon="calendar" onClick={copyToAll}>{t('Copy to all four weeks')}</Button>
+    <div style={{ height: 8 }} />
+    <Button variant="ghost" className="dim" onClick={close}>{t('Cancel')}</Button>
+  </>
+}
+export const cycleCopySheet = (sourceWeek: number) => ui().openSheet(close => <CycleCopy sourceWeek={sourceWeek} close={close} />)
 
 function DayAssign({ day, close }: any) {
   const st = useStore(s => s.S)

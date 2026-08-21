@@ -2,7 +2,7 @@ import { isRunningInExpoGo } from 'expo'
 import * as FileSystem from 'expo-file-system/legacy'
 import * as Sharing from 'expo-sharing'
 import { Platform } from 'react-native'
-import type { AppState } from './core'
+import { isoOf, routineForDate, type AppState } from './core'
 
 const STATE_URI = `${FileSystem.documentDirectory || ''}opengym-state.json`
 const CHANNEL_ID = 'opengym-workout-reminders'
@@ -59,25 +59,52 @@ export async function syncNativeReminders(state: AppState, interactive = false):
     }
 
     const [hour, minute] = (state.reminder.time || '08:00').split(':').map(Number)
-    for (const [day, routineId] of Object.entries(state.week)) {
-      const routine = state.routines.find(item => item.id === routineId)
-      if (!routine) continue
-      await Notifications.scheduleNotificationAsync({
-        content: {
-          title: 'Workout day',
-          body: `${routine.name} is on the plan today — let’s go!`,
-          data: { opengym: 'workout-reminder' },
-          sound: 'default',
-        },
-        trigger: {
-          type: Notifications.SchedulableTriggerInputTypes.WEEKLY,
-          weekday: Number(day) + 1,
-          hour,
-          minute,
-          ...(Platform.OS === 'android' ? { channelId: CHANNEL_ID } : {}),
-        },
-      })
+    const contentFor = (routine: NonNullable<ReturnType<typeof routineForDate>>) => ({
+      title: 'Workout day',
+      body: `${routine.name} is on the plan today - let us go!`,
+      data: { opengym: 'workout-reminder' },
+      sound: 'default' as const,
+    })
+    const androidTrigger = Platform.OS === 'android' ? { channelId: CHANNEL_ID } : {}
+    const jobs: Array<Promise<string>> = []
+
+    if (Object.keys(state.cyclePlan).length) {
+      // A four-week cycle can override the recurring week one weekday at a time.
+      // Use concrete date triggers for the next five weeks so a cycle date is
+      // reminded exactly once, even when the weekly fallback has the same weekday.
+      const now = new Date()
+      const end = new Date(now)
+      end.setDate(end.getDate() + 35)
+      for (const cursor = new Date(now); cursor <= end; cursor.setDate(cursor.getDate() + 1)) {
+        const iso = isoOf(cursor)
+        const routine = routineForDate(state, cursor)
+        if (!routine) continue
+        const date = new Date(cursor)
+        date.setHours(hour, minute, 0, 0)
+        if (date <= now) continue
+        jobs.push(Notifications.scheduleNotificationAsync({
+          content: contentFor(routine),
+          trigger: { type: Notifications.SchedulableTriggerInputTypes.DATE, date, ...androidTrigger },
+        }))
+      }
+    } else {
+      const routineById = new Map(state.routines.map(routine => [routine.id, routine]))
+      for (const [day, routineId] of Object.entries(state.week)) {
+        const routine = routineById.get(routineId)
+        if (!routine) continue
+        jobs.push(Notifications.scheduleNotificationAsync({
+          content: contentFor(routine),
+          trigger: {
+            type: Notifications.SchedulableTriggerInputTypes.WEEKLY,
+            weekday: Number(day) + 1,
+            hour,
+            minute,
+            ...androidTrigger,
+          },
+        }))
+      }
     }
+    await Promise.all(jobs)
     return true
   } catch {
     return false
