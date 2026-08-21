@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useRef, useState, type ReactNode } from 'react'
 import { Alert, Image, Pressable, ScrollView, Text, TextInput, View } from 'react-native'
 import Svg, { Circle as SvgCircle, Line as SvgLine, Path as SvgPath } from 'react-native-svg'
-import { EXDB, Exercise, Routine, RoutineExercise, Workout, WorkoutEntry, exerciseOf, formatDuration, formatNumber, isoOf, routineForDay, starterRoutines, todayISO } from './core'
+import { CYCLE_WEEKS, EXDB, Exercise, Routine, RoutineExercise, WEEK_ORDER, Workout, WorkoutEntry, copyCycleWeekTo, copyCycleWeekToAll, copyWeekToCycle, cycleWeekForDate, defaultCycleStart, exerciseOf, formatDuration, formatNumber, isoOf, routineForDate, routineForDay, starterRoutines, todayISO } from './core'
 import { useNativeStore } from './store'
 import { Button, Card, Chip, Empty, Field, Icon, IconButton, ListRow, Screen, Section, Segmented, Stat, Toggle, colors, styles } from './ui'
 import { cx, uiClasses } from '@opengym/ui'
@@ -17,10 +17,7 @@ const GIF_BASE = 'https://cdn.jsdelivr.net/gh/hasaneyldrm/exercises-dataset@7455
 const screenStyles = uiClasses
 
 function plannedRoutineForDate(state: ReturnType<typeof useNativeStore>['state'], date: Date): Routine | null {
-  const iso = isoOf(date)
-  const override = state.dayPlan[iso]
-  const id = typeof override === 'string' ? override : state.week[String(date.getDay())]
-  return state.routines.find(routine => routine.id === id) || null
+  return routineForDate(state, date)
 }
 
 function dateLabel(iso: string): string {
@@ -134,7 +131,11 @@ export function HomeScreen({ navigate }: { navigate: Navigate }) {
   const weekLabel = weekOffset === 0 ? 'This week' : `${monday.getDate()} ${monday.toLocaleDateString('en-US', { month: 'short' })} - ${sunday.getDate()} ${sunday.toLocaleDateString('en-US', { month: 'short' })}`
   const weekValues = state.bodyweight.slice(-12).map(item => ({ id: item.d, value: item.w }))
   const weekWorkouts = state.workouts.filter(workout => workout.d >= isoOf(monday) && workout.d <= isoOf(sunday)).length
-  const plannedDays = Object.values(state.week).filter(Boolean).length
+  const plannedDays = Array.from({ length: 7 }, (_, index) => {
+    const date = new Date(monday)
+    date.setDate(monday.getDate() + index)
+    return plannedRoutineForDate(state, date)
+  }).filter(Boolean).length
 
   const openToday = () => {
     if (todayRoutine) { setSelectedRoutine(todayRoutine.id); navigate('workout') } else navigate('plan')
@@ -188,8 +189,70 @@ export function HomeScreen({ navigate }: { navigate: Navigate }) {
   </Screen>
 }
 
+function FourWeekPlan({ state, update }: { state: ReturnType<typeof useNativeStore>['state']; update: ReturnType<typeof useNativeStore>['update'] }) {
+  const cycleStart = state.cycleStart || defaultCycleStart()
+  const currentWeek = cycleWeekForDate(todayISO(), cycleStart)
+  const [selectedWeek, setSelectedWeek] = useState(currentWeek)
+  const cycle = state.cyclePlan[String(selectedWeek)] || {}
+
+  const setDay = (day: number, value: string) => update(next => {
+    next.cycleStart = next.cycleStart || defaultCycleStart()
+    next.cyclePlan[String(selectedWeek)] = next.cyclePlan[String(selectedWeek)] || {}
+    if (value) next.cyclePlan[String(selectedWeek)][String(day)] = value
+    else delete next.cyclePlan[String(selectedWeek)][String(day)]
+  })
+  const chooseDay = (day: number) => {
+    const buttons = [
+      ...state.routines.map(routine => ({ text: routine.name, onPress: () => setDay(day, routine.id) })),
+      { text: 'Rest', onPress: () => setDay(day, 'rest') },
+      { text: 'Use weekly plan', onPress: () => setDay(day, '') },
+      { text: 'Cancel', style: 'cancel' as const },
+    ]
+    Alert.alert(`Week ${selectedWeek} · ${DAY_NAMES[day]}`, 'Choose the plan for this weekday.', buttons)
+  }
+  const copyToWeek = (targetWeek: number) => update(next => {
+    next.cyclePlan = copyCycleWeekTo(next.cyclePlan, selectedWeek, targetWeek)
+    next.cycleStart = next.cycleStart || defaultCycleStart()
+  })
+  const copyToAll = () => update(next => {
+    next.cyclePlan = copyCycleWeekToAll(next.cyclePlan, selectedWeek)
+    next.cycleStart = next.cycleStart || defaultCycleStart()
+  })
+  const copyWeek = () => Alert.alert(`Copy Week ${selectedWeek}`, 'Choose another week, or copy it to all four weeks.', [
+    ...CYCLE_WEEKS.filter(week => week !== selectedWeek).map(week => ({ text: `Copy to Week ${week}`, onPress: () => copyToWeek(week) })),
+    { text: 'Copy to all four weeks', onPress: copyToAll },
+    { text: 'Cancel', style: 'cancel' as const },
+  ])
+  const resetCycleStart = () => update(next => { next.cycleStart = defaultCycleStart() })
+
+  return <Section title="4-week cycle" action={<Button compact tone="tinted" icon="calendar" onPress={copyWeek}>Copy this week plan</Button>}>
+    <Card>
+      <View className={styles.between} style={{ marginBottom: 8 }}><View><Text className={styles.cardTitle}>Week {selectedWeek}</Text><Text className={styles.small}>Repeats after Week 4 · starts {dateLabel(cycleStart)}</Text></View><Button compact tone="muted" onPress={resetCycleStart}>Start this week</Button></View>
+      <Segmented value={String(selectedWeek)} onChange={value => setSelectedWeek(Number(value))} options={CYCLE_WEEKS.map(week => ({ value: String(week), label: `Week ${week}` }))} />
+      <View style={{ marginTop: 10 }}>{WEEK_ORDER.map(day => {
+        const assignment = cycle[String(day)]
+        const explicit = assignment !== undefined
+        const routine = assignment && assignment !== 'rest' ? state.routines.find(item => item.id === assignment) : !explicit ? state.routines.find(item => item.id === state.week[String(day)]) : null
+        return <Card key={day} style={{ marginBottom: 6, borderLeftWidth: 3, borderLeftColor: explicit ? colors.accent : colors.dim }}>
+          <Pressable onPress={() => chooseDay(day)} className={styles.itemRow} style={({ pressed }) => ({ opacity: pressed ? 0.65 : 1 })} accessibilityLabel={`Week ${selectedWeek} ${DAY_NAMES[day]}: ${routine?.name || 'Rest'}`}>
+            <View className={styles.listMain}><Text className={styles.itemTitle}>{DAY_NAMES[day]}</Text><Text className={styles.listSubtitle}>{explicit ? 'This cycle week' : 'Weekly fallback'}</Text></View>
+            {routine ? <Tag accent icon="dumbbell">{routine.name}</Tag> : <Tag>Rest</Tag>}
+            <Icon name="chevronRight" size={15} />
+          </Pressable>
+        </Card>
+      })}</View>
+      <Text className={styles.small} style={{ textAlign: 'center', marginTop: 8 }}>Week 1 → Week 2 → Week 3 → Week 4, then Week 1 again.</Text>
+    </Card>
+  </Section>
+}
+
 export function PlanScreen({ navigate }: { navigate: Navigate }) {
   const { state, setRoutines, setSelectedRoutine, update } = useNativeStore()
+  const [view, setView] = useState<'week' | 'cycle'>('cycle')
+  const copyWeeklyPlan = () => update(next => {
+    next.cyclePlan = copyWeekToCycle(next.week)
+    next.cycleStart = next.cycleStart || defaultCycleStart()
+  })
   const assignDay = (day: number) => {
     const routines = state.routines
     const current = state.week[String(day)]
@@ -197,11 +260,12 @@ export function PlanScreen({ navigate }: { navigate: Navigate }) {
     const next = routines.length ? routines[(currentIndex + 1) % (routines.length + 1)] : null
     update(next ? s => { s.week[String(day)] = next.id } : s => { delete s.week[String(day)] })
   }
-  return <Screen title="Plan" subtitle="Your weekly routine" action={<IconButton name="upload" label="Share your plan" onPress={() => Alert.alert('Plan sharing', 'Plan sharing is available in the web app.')}/> }>
-    <Section title="Week schedule">{[1, 2, 3, 4, 5, 6, 0].map(day => {
+  return <Screen title="Plan" subtitle={view === 'cycle' ? 'Your four-week cycle' : 'Your weekly routine'} action={<IconButton name="upload" label="Share your plan" onPress={() => Alert.alert('Plan sharing', 'Plan sharing is available in the web app.')}/> }>
+    <Segmented value={view} onChange={value => setView(value as 'week' | 'cycle')} options={[{ value: 'week', label: 'Week' }, { value: 'cycle', label: '4-week cycle' }]} />
+    {view === 'cycle' ? <FourWeekPlan state={state} update={update} /> : <Section title="Week schedule" action={<Button compact tone="tinted" icon="calendar" onPress={copyWeeklyPlan}>Copy weekly plan to all weeks</Button>}>{[1, 2, 3, 4, 5, 6, 0].map(day => {
       const routine = state.routines.find(item => item.id === state.week[String(day)])
       return <Card key={day} className={screenStyles.itemCard}><Pressable onPress={() => assignDay(day)} className={styles.itemRow} style={({ pressed }) => ({ opacity: pressed ? 0.65 : 1 })}><View className={styles.listMain}><Text className={styles.itemTitle}>{DAY_NAMES[day]}</Text></View>{routine ? <Tag accent icon="dumbbell">{routine.name}</Tag> : <Tag>Rest</Tag>}<Icon name="chevronRight" size={15} /></Pressable></Card>
-    })}</Section>
+    })}</Section>}
     <Section title="Routines" action={<Button compact tone="tinted" icon="plus" onPress={() => Alert.alert('New routine', 'Create a routine from the web app, or load the starter plan here.')}>New</Button>}>
       {state.routines.length ? state.routines.map(routine => <Card key={routine.id} className={screenStyles.itemCard}><RoutineRow routine={routine} onPress={() => { setSelectedRoutine(routine.id); navigate('workout') }} /></Card>) : <><Empty>No routines yet. Create one or load the starter plan.</Empty><Button icon="sparkles" onPress={() => setRoutines(starterRoutines())}>Load starter plan (Push / Pull / Legs)</Button></>}
     </Section>

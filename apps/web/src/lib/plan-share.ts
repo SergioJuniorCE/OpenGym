@@ -1,8 +1,8 @@
-// Share a weekly plan.
+// Share a weekly plan or a repeating four-week cycle.
 //
 // Two jobs:
 //  1. A small, self-contained file a friend can import into THEIR openGym — just the
-//     routines + the week schedule + the custom exercises those routines use. It never
+//     routines + the weekly/cycle schedule + the custom exercises those routines use. It never
 //     carries workouts, weigh-ins or settings, and importing MERGES (adds routines with
 //     fresh ids) so nothing the friend already has is touched.
 //  2. A clean, printable page (Save as PDF) where a single exercise never splits across
@@ -13,8 +13,10 @@ import { modeOf, fmtSec, isBw, isPerSide, sideReps } from './history'
 import { uid, todayISO, DAYN, fmtNum, exCount } from './format'
 import { t } from './i18n'
 
-const PLAN_FMT = 1
+const PLAN_FMT = 3
 const WEEK_ORDER = [1, 2, 3, 4, 5, 6, 0]   // Mon-first, matching the Plan screen
+const CYCLE_WEEKS = [1, 2, 3, 4]
+const REST_DAY = 'rest'
 
 // Keep only the meaningful config fields, so the file stays small and readable.
 function cleanEx(e: any) {
@@ -48,7 +50,7 @@ function cleanEx(e: any) {
   return o
 }
 
-/** Build the shareable bundle: every routine, the week schedule, referenced customs. */
+/** Build the shareable bundle: every routine, both schedule types, and referenced customs. */
 export function buildPlanBundle(S, name) {
   const routines = (S.routines || []).map(r => ({
     id: r.id, name: r.name, emoji: r.emoji, ...(r.prog ? { prog: r.prog } : {}), ex: (r.ex || []).map(cleanEx)
@@ -59,7 +61,17 @@ export function buildPlanBundle(S, name) {
     .map(c => ({ id: c.id, n: c.n, bp: c.bp, ...(c.desc ? { desc: c.desc } : {}) }))
   const week = {}
   WEEK_ORDER.forEach(d => { if (S.week?.[d]) week[d] = S.week[d] })
-  return { opengym_plan: PLAN_FMT, exported: todayISO(), name: name || '', week, routines, customEx }
+  const cyclePlan = {}
+  CYCLE_WEEKS.forEach(cycleWeek => {
+    const days = S.cyclePlan?.[String(cycleWeek)]
+    if (!days) return
+    const cleanDays = {}
+    Object.entries(days).forEach(([day, routineId]) => {
+      if (routineId === REST_DAY || routines.some(r => r.id === routineId)) cleanDays[day] = routineId
+    })
+    if (Object.keys(cleanDays).length) cyclePlan[String(cycleWeek)] = cleanDays
+  })
+  return { opengym_plan: PLAN_FMT, exported: todayISO(), name: name || '', week, cyclePlan, cycleStart: S.cycleStart || '', routines, customEx }
 }
 
 /**
@@ -87,15 +99,19 @@ export function parsePlan(raw) {
       return ok
     })
   }))
+  const cyclePlan = data.cyclePlan && typeof data.cyclePlan === 'object' ? data.cyclePlan : {}
+  const cycleDays = Object.values(cyclePlan) as Array<Record<string, string>>
   return {
     name: (data.name || '').trim(),
     routines,
     week: data.week || {},
+    cyclePlan,
+    cycleStart: typeof data.cycleStart === 'string' ? data.cycleStart : '',
     customEx,
     dropped,
     routineCount: routines.length,
     exerciseCount: routines.reduce((n, r) => n + r.ex.length, 0),
-    scheduledDays: WEEK_ORDER.filter(d => data.week?.[d]).length
+    scheduledDays: WEEK_ORDER.filter(d => data.week?.[d]).length + cycleDays.reduce((count, days) => count + Object.keys(days || {}).length, 0)
   }
 }
 
@@ -103,8 +119,8 @@ export function parsePlan(raw) {
  * Merge a parsed bundle into a draft state `s` (call inside store.update).
  *  - customs: reuse one you already have with the same name + body part, else add it fresh
  *  - routines: always added as NEW routines (fresh ids) — never overwrites yours
- *  - schedule: optional; when on, the shared week REPLACES yours (days the shared plan
- *    leaves empty become rest days — a half-overwritten week would silently mix two plans)
+ *  - schedule: optional; when on, each schedule present in the shared file REPLACES the
+ *    matching schedule on the receiving device
  */
 export function mergePlan(s: any, bundle: any, { schedule }: any = {}) {
   s.customEx = s.customEx || []
@@ -129,11 +145,28 @@ export function mergePlan(s: any, bundle: any, { schedule }: any = {}) {
     })
   })
   if (schedule) {
-    WEEK_ORDER.forEach(d => { delete s.week[d] })
-    Object.entries(bundle.week || {}).forEach(([d, oldId]) => {
-      const mappedId = ridMap[String(oldId)]
-      if (mappedId) s.week[d] = mappedId
-    })
+    if (Object.keys(bundle.week || {}).length) {
+      WEEK_ORDER.forEach(d => { delete s.week[d] })
+      Object.entries(bundle.week || {}).forEach(([d, oldId]) => {
+        const mappedId = ridMap[String(oldId)]
+        if (mappedId) s.week[d] = mappedId
+      })
+    }
+    if (Object.keys(bundle.cyclePlan || {}).length) {
+      s.cyclePlan = {}
+      Object.entries(bundle.cyclePlan).forEach(([cycleWeek, days]) => {
+        const mappedDays = {}
+        Object.entries(days || {}).forEach(([day, oldId]) => {
+          if (oldId === REST_DAY) mappedDays[day] = REST_DAY
+          else {
+            const mappedId = ridMap[String(oldId)]
+            if (mappedId) mappedDays[day] = mappedId
+          }
+        })
+        if (Object.keys(mappedDays).length) s.cyclePlan[cycleWeek] = mappedDays
+      })
+      s.cycleStart = bundle.cycleStart || s.cycleStart || ''
+    }
   }
   return { routines: bundle.routines.length }
 }
@@ -197,6 +230,26 @@ function weekHTML(S) {
   return `<div class="week">${rows}</div>`
 }
 
+function cycleHTML(S) {
+  const weeks = CYCLE_WEEKS.map(cycleWeek => {
+    const days = S.cyclePlan?.[String(cycleWeek)] || {}
+    if (!Object.keys(days).length) return ''
+    const rows = WEEK_ORDER.map(day => {
+      const routineId = days[String(day)]
+      const fallback = routineId === undefined
+      const r = fallback
+        ? S.routines.find(x => x.id === S.week?.[day])
+        : routineId === REST_DAY ? null : S.routines.find(x => x.id === routineId)
+      const val = fallback
+        ? r ? `${esc(r.name)} <span class="rest">(${esc(t('weekly'))})</span>` : `<span class="rest">${esc(t('Weekly fallback'))}</span>`
+        : r ? esc(r.name) : `<span class="rest">${esc(t('Rest'))}</span>`
+      return `<div class="w-row"><div class="w-day">${esc(t(DAYN[day]))}</div><div class="w-r">${val}</div></div>`
+    }).join('')
+    return `<div class="cycle-print-block"><h4>${esc(t('Week'))} ${cycleWeek}</h4><div class="week">${rows}</div></div>`
+  }).join('')
+  return weeks ? `<h3 class="block">${esc(t('4-week cycle'))}</h3>${weeks}` : ''
+}
+
 /** Full self-contained HTML for the print/PDF view. */
 export function planPrintHTML(S, owner) {
   const unit = S.unit || 'kg'
@@ -206,7 +259,7 @@ export function planPrintHTML(S, owner) {
     : `<p class="none">${esc(t('No routines yet.'))}</p>`
   const sub = [owner, todayISO()].filter(Boolean).map(esc).join(' · ')
   return `<!doctype html><html><head><meta charset="utf-8">
-<title>${esc(t('Weekly Training Plan'))}</title>
+<title>${esc(t('Training Plan'))}</title>
 <style>
   @page { margin: 16mm 15mm; }
   * { box-sizing: border-box; }
@@ -253,11 +306,12 @@ export function planPrintHTML(S, owner) {
 <body><div class="doc">
   <header>
     <div class="kicker">openGym</div>
-    <h1>${esc(t('Weekly Training Plan'))}</h1>
+    <h1>${esc(t('Training Plan'))}</h1>
     ${sub ? `<div class="sub">${sub}</div>` : ''}
   </header>
   <h3 class="block">${esc(t('Week schedule'))}</h3>
   ${weekHTML(S)}
+  ${cycleHTML(S)}
   <h3 class="block">${esc(t('Routines'))}</h3>
   ${body}
   <footer>${esc(t('Made with openGym'))} · opengym.duarte-santos.ch</footer>

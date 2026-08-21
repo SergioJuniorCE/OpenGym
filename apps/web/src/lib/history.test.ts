@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest'
-import { modeOf, isTimed, fmtSec, setLabel, defaultConfig, buildSets, exLine, workoutVolume, effortOf, stepEffort, capEffort, isBw, isPerSide, sideReps, repStep } from './history'
+import { modeOf, isTimed, fmtSec, setLabel, defaultConfig, buildSets, exLine, workoutVolume, effortOf, stepEffort, capEffort, isBw, isPerSide, sideReps, repStep, effectiveRoutineId } from './history'
 import { EXDB } from './exercises'
 
 // Real ids out of the shipped catalogue, so the body-part fallback is exercised for real.
@@ -331,6 +331,30 @@ describe('exLine', () => {
     expect(exLine({ id: LIFT, sets: 3, sec: 45, mode: 'time' }, 'kg')).toBe('3 × 0:45')
     expect(exLine({ id: LIFT, sets: 2, sec: 90, weight: 20, mode: 'time' }, 'kg')).toBe('2 × 1:30 · 20 kg')
     expect(exLine({ id: CARDIO, sets: 1, min: 20, speed: 8 }, 'kg')).toBe('1 × 20 min @ 8 km/h')
+  })
+})
+
+describe('effectiveRoutineId', () => {
+  const routines = [{ id: 'weekly' }, { id: 'cycle' }, { id: 'rescheduled' }]
+
+  it('uses the active four-week cycle assignment before the recurring week', () => {
+    const state = { routines, week: { 1: 'weekly' }, cycleStart: '2026-01-05', cyclePlan: { '1': { '1': 'cycle' } }, dayPlan: {} }
+    expect(effectiveRoutineId(state, '2026-01-05')).toBe('cycle')
+  })
+
+  it('loops back to Week 1 after Week 4', () => {
+    const state = { routines, week: { 1: 'weekly' }, cycleStart: '2026-01-05', cyclePlan: { '1': { '1': 'cycle' } }, dayPlan: {} }
+    expect(effectiveRoutineId(state, '2026-02-02')).toBe('cycle')
+  })
+
+  it('allows a one-day reschedule to win over the cycle baseline', () => {
+    const state = { routines, week: { 1: 'weekly' }, cycleStart: '2026-01-05', cyclePlan: { '1': { '1': 'cycle' } }, dayPlan: { '2026-01-05': 'rescheduled' } }
+    expect(effectiveRoutineId(state, '2026-01-05')).toBe('rescheduled')
+  })
+
+  it('supports an explicit cycle rest day', () => {
+    const state = { routines, week: { 1: 'weekly' }, cycleStart: '2026-01-05', cyclePlan: { '1': { '1': 'rest' } }, dayPlan: {} }
+    expect(effectiveRoutineId(state, '2026-01-05')).toBeNull()
   })
 })
 
