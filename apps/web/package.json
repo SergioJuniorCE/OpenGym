@@ -14,7 +14,10 @@
   },
   "license": "AGPL-3.0-or-later",
   "dependencies": {
+    "@better-auth/passkey": "1.7.1",
+    "@better-auth/utils": "0.4.2",
     "@opengym/ui": "workspace:*",
+    "better-auth": "1.7.1",
     "react": "^19.2.7",
     "react-dom": "^19.2.7",
     "react-router-dom": "^7.18.2",

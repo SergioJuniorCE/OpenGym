@@ -39,7 +39,8 @@ cp .env.example .env
 ```
 
 Use a domain that points to the VPS. Choose it before anyone registers a
-passkey: WebAuthn credentials are bound to the exact hostname.
+passkey: WebAuthn credentials are bound to the exact hostname. Email/password
+accounts work on the same origin and do not change the passkey hostname rule.
 
 Edit `.env`:
 
@@ -100,9 +101,16 @@ other than the VPS:
 tar -C /opt/opengym -czf /var/backups/opengym-$(date +%F).tar.gz data
 ```
 
-The data directory contains sessions, passkeys, and workout history. Protect it
-like credentials. Back up `media` too if you want to avoid downloading the
+The data directory contains the Better Auth SQLite database (`auth.db`), app
+metadata, passkeys, password hashes, sessions, and workout history. Protect it
+like credentials.
+Back up `media` too if you want to avoid downloading the
 exercise dataset again after a restore.
+
+On the first start after upgrading from the JSON-auth server, the API imports
+users and passkeys from `db.json` into `auth.db`. Existing `gymsid` cookies are
+not compatible with Better Auth and will require one fresh sign-in; workout
+state and invite metadata remain in their existing JSON files.
 
 ## Updating
 

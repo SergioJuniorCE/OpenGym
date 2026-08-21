@@ -7,7 +7,7 @@
 **A self-hosted gym & body-weight tracker you actually own.**
 
 Plan your week, run guided workouts, track every set and your body weight over time —
-on your phone, synced across devices, behind your own passkey login.
+on your phone, synced across devices, behind your own passkey or email/password login.
 No account on someone else's server, no subscription, no ads. Just `docker compose up`.
 
 <br>
@@ -42,7 +42,7 @@ No account on someone else's server, no subscription, no ads. Just `docker compo
 ### [🌐 opengym.duarte-santos.ch](https://opengym.duarte-santos.ch) · [▶ Try the live demo](https://duartesantos8.github.io/openGym/)
 
 No signup, nothing to install — it runs entirely in your browser on example data.<br>
-<sub>There's no server behind the demo, so passkey sign-in, sync across devices and the
+<sub>There's no server behind the demo, so account sign-in, sync across devices and the
 admin dashboard only exist in a self-hosted instance.</sub>
 
 </div>
@@ -52,7 +52,7 @@ admin dashboard only exist in a self-hosted instance.</sub>
 Most workout apps lock your data behind a login on their servers, nag you to upgrade, or
 disappear when the startup does. openGym is the opposite: **it runs on your box, your data
 stays in a folder you control, and it's yours to fork.** It still feels modern — installable
-as a home-screen app, passkey sign-in, offline support, sync across your phone and laptop.
+as a home-screen app, passkey or email/password sign-in, offline support, sync across your phone and laptop.
 
 ## Features
 
@@ -75,7 +75,7 @@ as a home-screen app, passkey sign-in, offline support, sync across your phone a
 - 🟩 **Activity heatmap** — a GitHub-style year view, shaded by time spent training
 - 💪 **Muscle map** — a front-and-back body diagram shaded by how much work each muscle got, over a week, a month or all time. It names the muscles you *haven't* trained in that period, previews what a routine hits while you build it, and shows what you just trained when you finish. Male or female figure, your pick
 - 🔔 **Push notifications** — rest-timer alerts even with the app closed, plus an optional reminder on days you have a workout planned but haven't logged one. Opt in per profile; keys are generated on first run, nothing to configure
-- 🔑 **Passkeys, not passwords** — Face ID / Touch ID / fingerprint login; each profile keeps its own data, synced across devices
+- 🔑 **Passkeys or email/password** — use Face ID / Touch ID / fingerprint, or a traditional email and password; each profile keeps its own data, synced across devices
 - 🛠️ **Admin dashboard** (optional) — for whoever runs the instance: who's training right now, per-user history, disable accounts, and invite-only signup. Off by default, so a fresh instance stays open with no admin
 - 🎨 **Designed, not assembled** — light/dark themes and 8 accent colors saved to your profile, over a hand-drawn icon set instead of emoji, so it looks the same on every phone
 - 🌍 **12 languages** — full UI translation (EN, DE, ES, FR, IT, PT, PL, TR, RU, ZH, KO, HI); exercise instructions localized in 10 of them, loaded on demand so the app stays fast
@@ -162,21 +162,26 @@ mobile app is the install-and-done flavor.
                        └──────────────────────────────┘│
                                                         ▼
                                         ┌──────────────────────────┐
-                                        │  api  (Node + WebAuthn)  │
-                                        │   └─ ./data (JSON files) │
+                                        │  api  (Node + Better Auth) │
+                                        │   └─ ./data (SQLite + JSON) │
                                         └──────────────────────────┘
 ```
 
 - **apps/web/** — React + Vite (React Router + Zustand), built to static files **inside Docker**
-- **apps/api/** — Hono on Node, written in TypeScript and storing everything as plain JSON files under `./data`
+- **apps/api/** — Hono on Node, written in TypeScript; Better Auth stores identity, sessions, passkeys, and password accounts in SQLite while workout data remains in `./data`
 - **Dockerfile** + **web/nginx.conf** — a multi-stage image that builds the frontend and serves it with nginx, proxying `/api` to the backend so it's all on **one origin** (passkeys require this)
 
 ## Your data
 
-Lives in `./data` on your host: `db.json` (profiles + public passkeys), `state-<user>.json`
-(each user's plan, workouts, body weight, settings), and `secret` (the session-cookie key).
+Lives in `./data` on your host: `auth.db` (Better Auth users, sessions, passkeys, and password hashes), `db.json`
+(app metadata, legacy credential migration backup, push subscriptions, and invites), `state-<user>.json` (each user's plan, workouts,
+body weight, and settings), and `secret` (the Better Auth signing key).
 **Back up `./data` and you've backed up everything.** Passkey private keys never touch the
 server — they stay in your phone's secure hardware / your password manager.
+
+When upgrading an existing install, the first API start imports legacy users and passkeys from
+`db.json` into `auth.db`. Existing sessions are intentionally invalidated, so each person signs in
+once again; workout state and invite metadata are preserved.
 
 ## Configuration
 

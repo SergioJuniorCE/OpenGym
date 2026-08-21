@@ -2,7 +2,7 @@ import { serve } from '@hono/node-server';
 
 import { createApp } from './app.ts';
 
-const runtime = createApp();
+const runtime = await createApp();
 const server = serve(
   {
     fetch: runtime.app.fetch,

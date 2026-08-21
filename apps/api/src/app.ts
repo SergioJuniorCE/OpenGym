@@ -2,14 +2,10 @@ import crypto from 'node:crypto';
 import fs from 'node:fs';
 import path from 'node:path';
 
-import {
-  generateAuthenticationOptions,
-  generateRegistrationOptions,
-  verifyAuthenticationResponse,
-  verifyRegistrationResponse,
-} from '@simplewebauthn/server';
-import { Hono } from 'hono';
+import { Hono, type Context } from 'hono';
 import webpush from 'web-push';
+
+import { createAuthRuntime, type AuthRuntime } from './auth.ts';
 
 const DEFAULT_PORT = 3000;
 const DEFAULT_DATA_DIR = '/data';
@@ -21,9 +17,6 @@ const MAX_BODY_BYTES = 5 * 1024 * 1024;
 const PRESENCE_TTL_MS = 70_000;
 
 type JsonObject = Record<string, unknown>;
-type RegistrationCredential = Parameters<typeof verifyRegistrationResponse>[0]['response'];
-type AuthenticationCredential = Parameters<typeof verifyAuthenticationResponse>[0]['response'];
-type AuthenticationVerificationOptions = Parameters<typeof verifyAuthenticationResponse>[0];
 
 interface User {
   id: string;
@@ -33,7 +26,6 @@ interface User {
   disabled?: boolean;
   invitedBy?: string;
   lastReminder?: string;
-  sv?: number;
 }
 
 interface CredentialRecord {
@@ -100,14 +92,6 @@ interface PersistedState {
   [key: string]: unknown;
 }
 
-interface Challenge {
-  challenge: string;
-  code?: string;
-  exp: number;
-  name?: string;
-  uid?: string;
-}
-
 interface Presence {
   name: string;
   exIdx: number;
@@ -152,6 +136,7 @@ export interface ApiConfig {
 export interface ApiRuntime {
   app: Hono;
   config: ApiConfig;
+  auth: AuthRuntime['auth'];
   dispose: () => void;
 }
 
@@ -185,7 +170,6 @@ function json(data: unknown, status = 200, extraHeaders?: HeadersInit): Response
   const headers = new Headers(extraHeaders);
   headers.set('Content-Type', 'application/json');
   headers.set('Cache-Control', 'no-store');
-
   return new Response(JSON.stringify(data), { status, headers });
 }
 
@@ -199,17 +183,12 @@ function asRecord(value: unknown): JsonObject | null {
   return typeof value === 'object' && value !== null ? (value as JsonObject) : null;
 }
 
-function errorMessage(error: unknown): string {
-  return String(asRecord(error)?.message);
-}
-
 async function readJsonBody(request: Request, maxBytes: number): Promise<JsonObject> {
   if (!request.body) return {};
 
   const reader = request.body.getReader();
   const chunks: Uint8Array[] = [];
   let size = 0;
-
   while (true) {
     const { done, value } = await reader.read();
     if (done) break;
@@ -220,7 +199,6 @@ async function readJsonBody(request: Request, maxBytes: number): Promise<JsonObj
     }
     chunks.push(value);
   }
-
   if (chunks.length === 0) return {};
 
   try {
@@ -235,8 +213,10 @@ function loadDatabase(dbFile: string): Database {
   try {
     database = JSON.parse(fs.readFileSync(dbFile, 'utf8')) as Database;
   } catch {
-    // A missing or unreadable database is a fresh instance, matching the legacy server.
+    // A missing or unreadable database is a fresh instance.
   }
+  database.users = database.users || [];
+  database.creds = database.creds || [];
   database.subs = database.subs || [];
   database.invites = database.invites || [];
   return database;
@@ -252,11 +232,7 @@ function loadVapidKeys(vapidFile: string): VapidKeys {
   }
 }
 
-/**
- * Builds the complete API without opening a socket. The Node entrypoint is deliberately separate,
- * so route behavior can be exercised through Hono's `app.request()` seam.
- */
-export function createApp(environment: NodeJS.ProcessEnv = process.env): ApiRuntime {
+export async function createApp(environment: NodeJS.ProcessEnv = process.env): Promise<ApiRuntime> {
   const config = resolveConfig(environment);
   fs.mkdirSync(config.dataDir, { recursive: true });
 
@@ -265,9 +241,9 @@ export function createApp(environment: NodeJS.ProcessEnv = process.env): ApiRunt
     fs.writeFileSync(secretFile, crypto.randomBytes(32).toString('hex'), { mode: 0o600 });
   }
   const secret = fs.readFileSync(secretFile, 'utf8').trim();
-
   const dbFile = path.join(config.dataDir, 'db.json');
   const database = loadDatabase(dbFile);
+  const saveDatabase = (): void => atomicWrite(dbFile, JSON.stringify(database, null, 2));
   const stateFile = (uid: string): string =>
     path.join(config.dataDir, `state-${uid.replace(/[^a-zA-Z0-9_-]/g, '')}.json`);
   const readState = (uid: string): PersistedState | null => {
@@ -277,18 +253,62 @@ export function createApp(environment: NodeJS.ProcessEnv = process.env): ApiRunt
       return null;
     }
   };
-  const saveDatabase = (): void => atomicWrite(dbFile, JSON.stringify(database, null, 2));
-
-  const vapid = loadVapidKeys(path.join(config.dataDir, 'vapid.json'));
-  webpush.setVapidDetails(config.vapidSubject, vapid.publicKey, vapid.privateKey);
 
   const isAdmin = (user: User | null | undefined): boolean =>
     Boolean(user && (user.admin === true || config.adminUids.includes(user.id)));
 
+  const authRuntime = await createAuthRuntime({
+    dataDir: config.dataDir,
+    origin: config.origin,
+    rpId: config.rpId,
+    rpName: config.rpName,
+    sessionDays: config.sessionDays,
+    secret,
+    legacyUsers: database.users,
+    legacyCredentials: database.creds,
+    callbacks: {
+      isAdmin: (userId) =>
+        config.adminUids.includes(userId) ||
+        Boolean(database.users.find((user) => user.id === userId)?.admin),
+      isInviteValid: (code) =>
+        !config.inviteOnly ||
+        database.invites.some(
+          (invite) => invite.code === code && !invite.usedBy && !invite.revoked,
+        ),
+      registerUser: (registration) => {
+        if (database.users.some((user) => user.id === registration.id)) return;
+        const user: User = {
+          id: registration.id,
+          name: registration.name,
+          created: registration.created,
+        };
+        const invite = config.inviteOnly
+          ? database.invites.find(
+              (candidate) =>
+                candidate.code === registration.code && !candidate.usedBy && !candidate.revoked,
+            )
+          : undefined;
+        if (config.inviteOnly && !invite) {
+          throw new Error('invite code is no longer valid');
+        }
+        if (invite) {
+          user.invitedBy = invite.code;
+          invite.usedBy = user.id;
+          invite.usedAt = user.created;
+        }
+        database.users.push(user);
+        saveDatabase();
+      },
+    },
+  });
+  const auth = authRuntime.auth;
+
+  const vapid = loadVapidKeys(path.join(config.dataDir, 'vapid.json'));
+  webpush.setVapidDetails(config.vapidSubject, vapid.publicKey, vapid.privateKey);
+
   const sendPush = async (userId: string, payload: PushPayload): Promise<void> => {
     const subscriptions = database.subs.filter((subscription) => subscription.userId === userId);
     if (subscriptions.length === 0) return;
-
     const body = JSON.stringify(payload);
     let dirty = false;
     await Promise.all(
@@ -334,11 +354,7 @@ export function createApp(environment: NodeJS.ProcessEnv = process.env): ApiRunt
       userId,
       setTimeout(() => {
         restTimers.delete(userId);
-        void sendPush(userId, {
-          title: 'Rest over 💪',
-          body: 'Time for your next set.',
-          tag: 'rest-timer',
-        });
+        void sendPush(userId, { title: 'Rest over 💪', body: 'Time for your next set.', tag: 'rest-timer' });
       }, seconds * 1000),
     );
   };
@@ -357,7 +373,6 @@ export function createApp(environment: NodeJS.ProcessEnv = process.env): ApiRunt
     const weekday = new Date(`${isoDate}T12:00:00`).getDay();
     return state.week?.[weekday] || null;
   };
-
   const userNow = (timeZone: string): { date: string; hhmm: string } | null => {
     try {
       const parts = new Intl.DateTimeFormat('en-CA', {
@@ -380,67 +395,24 @@ export function createApp(environment: NodeJS.ProcessEnv = process.env): ApiRunt
     }
   };
 
-  const challenges = new Map<string, Challenge>();
-  const putChallenge = (data: Omit<Challenge, 'exp'>): string => {
-    const id = crypto.randomBytes(16).toString('base64url');
-    challenges.set(id, { ...data, exp: Date.now() + 5 * 60_000 });
-    return id;
-  };
-  const takeChallenge = (id: string): Challenge | null => {
-    const challenge = challenges.get(id);
-    challenges.delete(id);
-    if (!challenge || challenge.exp < Date.now()) return null;
-    return challenge;
-  };
-
-  const sign = (payload: string): string => {
-    const mac = crypto.createHmac('sha256', secret).update(payload).digest('base64url');
-    return `${payload}.${mac}`;
-  };
-  const verifySignature = (token: string): string | null => {
-    const separator = token.lastIndexOf('.');
-    if (separator < 0) return null;
-    const payload = token.slice(0, separator);
-    const mac = token.slice(separator + 1);
-    const expected = crypto.createHmac('sha256', secret).update(payload).digest('base64url');
+  const readSession = async (headers: Headers): Promise<User | null> => {
     try {
-      if (!crypto.timingSafeEqual(Buffer.from(mac), Buffer.from(expected))) return null;
+      const session = await authRuntime.getSession(headers);
+      if (!session || session.user.banned) return null;
+      const user = database.users.find((candidate) => candidate.id === session.user.id) || null;
+      return user && !user.disabled ? user : null;
     } catch {
       return null;
     }
-    return payload;
   };
-  const sessionVersion = (user: User): number => user.sv || 0;
-  const makeSession = (user: User): string => {
-    const expiry = Date.now() + config.sessionDays * 86_400_000;
-    return sign(`${user.id}:${expiry}:${sessionVersion(user)}`);
+  const requireAdmin = async (
+    headers: Headers,
+  ): Promise<{ user: User; response?: never } | { user?: never; response: Response }> => {
+    const user = await readSession(headers);
+    if (!user) return { response: json({ error: 'not signed in' }, 401) };
+    if (!isAdmin(user)) return { response: json({ error: 'forbidden' }, 403) };
+    return { user };
   };
-  const readSession = (cookieHeader: string | undefined): User | null => {
-    const cookies = Object.fromEntries(
-      (cookieHeader || '').split(';').map((cookie) => {
-        const separator = cookie.indexOf('=');
-        return separator < 0
-          ? ['', '']
-          : [cookie.slice(0, separator).trim(), cookie.slice(separator + 1).trim()];
-      }),
-    );
-    const token = cookies.gymsid;
-    if (!token) return null;
-    const payload = verifySignature(token);
-    if (!payload) return null;
-    const [uid, expiry, version] = payload.split(':');
-    if (!uid || Number(expiry) < Date.now()) return null;
-    const user = database.users.find((candidate) => candidate.id === uid) || null;
-    if (!user || user.disabled) return null;
-    const claimedVersion = version === undefined ? 0 : Number(version);
-    if (!Number.isInteger(claimedVersion) || claimedVersion !== sessionVersion(user)) return null;
-    return user;
-  };
-  const sessionCookie = (user: User): string => {
-    const secure = config.secureCookies ? ' Secure;' : '';
-    return `gymsid=${makeSession(user)}; Path=/; Max-Age=${config.sessionDays * 86_400}; HttpOnly;${secure} SameSite=Lax`;
-  };
-  const clearCookie = `gymsid=; Path=/; Max-Age=0; HttpOnly;${config.secureCookies ? ' Secure;' : ''} SameSite=Lax`;
 
   const presence = new Map<string, Presence>();
   const livePresence = (uid: string): Presence | null => {
@@ -467,25 +439,15 @@ export function createApp(environment: NodeJS.ProcessEnv = process.env): ApiRunt
         const routineId = effectiveRoutineId(state, now.date);
         if (!routineId) continue;
         const routine = (state.routines || []).find((candidate) => candidate.id === routineId);
-        console.log('reminder firing', user.id, routineId);
         user.lastReminder = now.date;
         saveDatabase();
         void sendPush(user.id, {
-          title: routine
-            ? `${routine.emoji || '🏋️'} ${routine.name} today`
-            : 'Workout planned today',
+          title: routine ? `${routine.emoji || '🏋️'} ${routine.name} today` : 'Workout planned today',
           body: "It's on your plan — let's go 💪",
           tag: 'day-reminder',
         });
       }
     }, 10_000).unref(),
-  );
-  intervals.push(
-    setInterval(() => {
-      for (const [id, challenge] of challenges) {
-        if (challenge.exp < Date.now()) challenges.delete(id);
-      }
-    }, 60_000).unref(),
   );
   intervals.push(
     setInterval(() => {
@@ -495,204 +457,160 @@ export function createApp(environment: NodeJS.ProcessEnv = process.env): ApiRunt
     }, 30_000).unref(),
   );
 
-  const requireAdmin = (
-    cookieHeader: string | undefined,
-  ): { user: User; response?: never } | { user?: never; response: Response } => {
-    const user = readSession(cookieHeader);
-    if (!user) return { response: json({ error: 'not signed in' }, 401) };
-    if (!isAdmin(user)) return { response: json({ error: 'forbidden' }, 403) };
-    return { user };
+  const readCookie = (header: string | null, name: string): string | null => {
+    for (const part of (header || '').split(';')) {
+      const separator = part.indexOf('=');
+      if (separator < 0 || part.slice(0, separator).trim() !== name) continue;
+      return part.slice(separator + 1).trim();
+    }
+    return null;
+  };
+  const registrationCookieAttributes = `Path=/; Max-Age=300; HttpOnly;${config.secureCookies ? ' Secure;' : ''} SameSite=Lax`;
+  const clearRegistrationCookies = (response: Response): Response => {
+    const headers = new Headers(response.headers);
+    headers.append('Set-Cookie', `opengym-registration=; ${registrationCookieAttributes.replace('Max-Age=300', 'Max-Age=0')}`);
+    headers.append('Set-Cookie', `opengym-registration-context=; ${registrationCookieAttributes.replace('Max-Age=300', 'Max-Age=0')}`);
+    return new Response(response.body, {
+      status: response.status,
+      statusText: response.statusText,
+      headers,
+    });
   };
 
   const app = new Hono({ strict: true });
-
-  // The legacy method table did not treat HEAD as GET. Hono dispatches HEAD through its GET
-  // router, so this all-method middleware checks the raw method before a GET route can handle it.
   app.use('*', async (context, next) => {
     if (context.req.method === 'HEAD') return json({ error: 'not found' }, 404);
     await next();
   });
+  const signUpWithEmail = async (request: Request): Promise<Response> => {
+    const body = await request.clone().json().catch(() => null) as JsonObject | null;
+    const name = typeof body?.name === 'string' ? body.name.trim().slice(0, 40) : '';
+    if (!name) return json({ error: 'name required' }, 400);
+
+    const contextToken = readCookie(request.headers.get('cookie'), 'opengym-registration-context');
+    const pendingRegistration = authRuntime.getRegistrationContext(contextToken);
+    const registration = authRuntime.validateRegistrationContext(contextToken, name);
+    if (pendingRegistration && !registration) {
+      return json({ error: 'registration context expired or invalid — try again' }, 400);
+    }
+    if (config.inviteOnly && !registration) {
+      return json({ error: 'a valid invite code is required' }, 403);
+    }
+
+    const headers = new Headers(request.headers);
+    headers.delete('content-length');
+    const response = await auth.handler(new Request(request, {
+      headers,
+      body: JSON.stringify({ ...body, name }),
+    }));
+    if (!response.ok) return response;
+    const result = await response.clone().json().catch(() => null) as {
+      user?: { id?: string; name?: string; createdAt?: string };
+    } | null;
+    if (result?.user?.id && result.user.name) {
+      try {
+        authRuntime.registerEmailUser(
+          { id: result.user.id, name: result.user.name, createdAt: result.user.createdAt },
+          registration?.code || '',
+        );
+      } catch {
+        await authRuntime.deleteUser(result.user.id);
+        return json({ error: 'invite code is no longer valid' }, 403);
+      }
+      if (contextToken && registration) authRuntime.consumeRegistrationContext(contextToken);
+      return clearRegistrationCookies(response);
+    }
+    return response;
+  };
+
+  app.all('/api/auth/*', async (context) => {
+    const rawRequest = context.req.raw;
+    const pathName = new URL(rawRequest.url).pathname;
+    if (pathName.endsWith('/sign-up/email')) return signUpWithEmail(rawRequest);
+
+    const cookieHeader = rawRequest.headers.get('cookie') || '';
+    const newProfileRegistration =
+      cookieHeader.split(';').some((part) => part.trim() === 'opengym-registration=1');
+    if (
+      newProfileRegistration &&
+      (pathName.endsWith('/passkey/generate-register-options') ||
+        pathName.endsWith('/passkey/verify-registration'))
+    ) {
+      // The Settings screen can intentionally create a second profile while a
+      // user is signed in. Better Auth's passkey-first flow must see this as an
+      // anonymous ceremony; the one-time signed context still binds the result.
+      const headers = new Headers(rawRequest.headers);
+      headers.set(
+        'cookie',
+        cookieHeader
+          .split(';')
+          .filter(
+            (part) =>
+              !/^(?:__Host-|__Secure-)?better-auth\.session_token=/.test(part.trim()),
+          )
+          .join(';'),
+      );
+      return auth.handler(new Request(rawRequest, { headers }));
+    }
+    return auth.handler(rawRequest);
+  });
 
   app.get('/api/health', () => json({ ok: true, users: database.users.length }));
-
   app.get('/api/config', () => json({ invite_only: config.inviteOnly }));
-
-  app.get('/api/me', (context) => {
-    const user = readSession(context.req.header('cookie'));
+  app.get('/api/me', async (context) => {
+    const user = await readSession(context.req.raw.headers);
     if (!user) return json({ error: 'not signed in' }, 401);
     return json({ user: { id: user.id, name: user.name, admin: isAdmin(user) } });
   });
 
-  app.post('/api/register/options', async (context) => {
+  app.post('/api/register/context', async (context) => {
     const body = await readJsonBody(context.req.raw, config.maxBodyBytes);
     const name = String(body.name || '').trim().slice(0, 40);
     if (!name) return json({ error: 'name required' }, 400);
     const code = String(body.code || '').trim().toUpperCase();
     if (
       config.inviteOnly &&
-      !database.invites.some(
-        (invite) => invite.code === code && !invite.usedBy && !invite.revoked,
-      )
+      !database.invites.some((invite) => invite.code === code && !invite.usedBy && !invite.revoked)
     ) {
       return json({ error: 'a valid invite code is required' }, 403);
     }
-    const uid = crypto.randomBytes(12).toString('base64url');
-    const options = await generateRegistrationOptions({
-      rpName: config.rpName,
-      rpID: config.rpId,
-      userID: Buffer.from(uid),
-      userName: name,
-      userDisplayName: name,
-      attestationType: 'none',
-      authenticatorSelection: {
-        residentKey: 'required',
-        userVerification: 'preferred',
-      },
-      excludeCredentials: [],
-    });
-    const cid = putChallenge({ challenge: options.challenge, name, uid, code });
-    return json({ cid, options });
-  });
-
-  app.post('/api/register/verify', async (context) => {
-    const body = await readJsonBody(context.req.raw, config.maxBodyBytes);
-    const challenge = takeChallenge(typeof body.cid === 'string' ? body.cid : '');
-    if (!challenge?.uid) return json({ error: 'challenge expired — try again' }, 400);
-
-    const credential = body.credential as RegistrationCredential;
-    let verification: Awaited<ReturnType<typeof verifyRegistrationResponse>>;
-    try {
-      verification = await verifyRegistrationResponse({
-        response: credential,
-        expectedChallenge: challenge.challenge,
-        expectedOrigin: config.origin,
-        expectedRPID: config.rpId,
-        requireUserVerification: false,
-      });
-    } catch (error) {
-      return json({ error: `verification failed: ${errorMessage(error)}` }, 400);
-    }
-    if (!verification.verified) return json({ error: 'not verified' }, 400);
-
-    const registeredCredential = verification.registrationInfo.credential;
-    if (database.creds.find((candidate) => candidate.id === registeredCredential.id)) {
-      return json({ error: 'credential already registered' }, 409);
-    }
-
-    let invite: Invite | undefined;
-    if (config.inviteOnly) {
-      invite = database.invites.find(
-        (candidate) =>
-          candidate.code === challenge.code && !candidate.usedBy && !candidate.revoked,
-      );
-      if (!invite) {
-        return json(
-          { error: 'invite code is no longer valid — ask for a new one' },
-          403,
-        );
-      }
-    }
-
-    const user: User = {
-      id: challenge.uid,
-      name: challenge.name as string,
-      created: new Date().toISOString(),
-    };
-    if (invite) {
-      user.invitedBy = invite.code;
-      invite.usedBy = user.id;
-      invite.usedAt = user.created;
-    }
-    database.users.push(user);
-    database.creds.push({
-      id: registeredCredential.id,
-      userId: user.id,
-      publicKey: Buffer.from(registeredCredential.publicKey).toString('base64url'),
-      counter: registeredCredential.counter || 0,
-      transports: credential?.response?.transports || [],
-    });
-    saveDatabase();
-    return json(
-      { user: { id: user.id, name: user.name, admin: isAdmin(user) } },
+    const registrationContext = authRuntime.createRegistrationContext(name, code);
+    const response = json(
+      { context: registrationContext },
       200,
-      { 'Set-Cookie': sessionCookie(user) },
+      { 'Set-Cookie': `opengym-registration=1; ${registrationCookieAttributes}` },
     );
+    response.headers.append(
+      'Set-Cookie',
+      `opengym-registration-context=${registrationContext}; ${registrationCookieAttributes}`,
+    );
+    return response;
   });
 
-  app.post('/api/login/options', async () => {
-    const options = await generateAuthenticationOptions({
-      rpID: config.rpId,
-      userVerification: 'preferred',
-      allowCredentials: [],
-    });
-    const cid = putChallenge({ challenge: options.challenge });
-    return json({ cid, options });
-  });
-
-  app.post('/api/login/verify', async (context) => {
-    const body = await readJsonBody(context.req.raw, config.maxBodyBytes);
-    const challenge = takeChallenge(typeof body.cid === 'string' ? body.cid : '');
-    if (!challenge) return json({ error: 'challenge expired — try again' }, 400);
-
-    const credentialRecord = asRecord(body.credential);
-    const credentialId = credentialRecord?.id;
-    const storedCredential = database.creds.find(
-      (candidate) => candidate.id === credentialId,
+  const signOut = (context: Context): Promise<Response> =>
+    auth.handler(
+      new Request(`${config.origin}/api/auth/sign-out`, {
+        method: 'POST',
+        headers: (() => {
+          const headers = new Headers(context.req.raw.headers);
+          headers.set('content-type', 'application/json');
+          headers.set('origin', config.origin);
+          return headers;
+        })(),
+        body: '{}',
+      }),
     );
-    if (!storedCredential) {
-      return json({ error: 'unknown passkey — create a profile first' }, 404);
-    }
-
-    const credential = body.credential as AuthenticationCredential;
-    let verification: Awaited<ReturnType<typeof verifyAuthenticationResponse>>;
-    try {
-      verification = await verifyAuthenticationResponse({
-        response: credential,
-        expectedChallenge: challenge.challenge,
-        expectedOrigin: config.origin,
-        expectedRPID: config.rpId,
-        requireUserVerification: false,
-        credential: {
-          id: storedCredential.id,
-          publicKey: Buffer.from(storedCredential.publicKey, 'base64url'),
-          counter: storedCredential.counter,
-          transports:
-            storedCredential.transports as AuthenticationVerificationOptions['credential']['transports'],
-        },
-      });
-    } catch (error) {
-      return json({ error: `verification failed: ${errorMessage(error)}` }, 400);
-    }
-    if (!verification.verified) return json({ error: 'not verified' }, 400);
-
-    storedCredential.counter = verification.authenticationInfo.newCounter;
-    saveDatabase();
-    const user = database.users.find((candidate) => candidate.id === storedCredential.userId);
-    if (!user) return json({ error: 'user missing' }, 500);
-    if (user.disabled) return json({ error: 'this account has been disabled' }, 403);
-    return json(
-      { user: { id: user.id, name: user.name, admin: isAdmin(user) } },
-      200,
-      { 'Set-Cookie': sessionCookie(user) },
-    );
-  });
-
-  app.post('/api/logout', () =>
-    json({ ok: true }, 200, {
-      'Set-Cookie': clearCookie,
-    }),
-  );
-
-  app.post('/api/logout/all', (context) => {
-    const user = readSession(context.req.header('cookie'));
+  app.post('/api/logout', (context) => signOut(context));
+  app.post('/api/logout/all', async (context) => {
+    const user = await readSession(context.req.raw.headers);
     if (!user) return json({ error: 'not signed in' }, 401);
-    user.sv = sessionVersion(user) + 1;
-    saveDatabase();
-    return json({ ok: true }, 200, { 'Set-Cookie': clearCookie });
+    const authContext = await auth.$context;
+    await authContext.internalAdapter.deleteUserSessions(user.id);
+    return signOut(context);
   });
 
-  app.get('/api/data', (context) => {
-    const user = readSession(context.req.header('cookie'));
+  app.get('/api/data', async (context) => {
+    const user = await readSession(context.req.raw.headers);
     if (!user) return json({ error: 'not signed in' }, 401);
     try {
       const state = JSON.parse(fs.readFileSync(stateFile(user.id), 'utf8')) as unknown;
@@ -701,9 +619,8 @@ export function createApp(environment: NodeJS.ProcessEnv = process.env): ApiRunt
       return json({ state: null });
     }
   });
-
   app.put('/api/data', async (context) => {
-    const user = readSession(context.req.header('cookie'));
+    const user = await readSession(context.req.raw.headers);
     if (!user) return json({ error: 'not signed in' }, 401);
     const body = await readJsonBody(context.req.raw, config.maxBodyBytes);
     const state = asRecord(body.state);
@@ -716,9 +633,8 @@ export function createApp(environment: NodeJS.ProcessEnv = process.env): ApiRunt
   });
 
   app.get('/api/push/public-key', () => json({ key: vapid.publicKey }));
-
   app.post('/api/push/subscribe', async (context) => {
-    const user = readSession(context.req.header('cookie'));
+    const user = await readSession(context.req.raw.headers);
     if (!user) return json({ error: 'not signed in' }, 401);
     const body = await readJsonBody(context.req.raw, config.maxBodyBytes);
     const subscription = asRecord(body.subscription);
@@ -726,9 +642,7 @@ export function createApp(environment: NodeJS.ProcessEnv = process.env): ApiRunt
     if (!subscription?.endpoint || !keys?.p256dh || !keys.auth) {
       return json({ error: 'invalid subscription' }, 400);
     }
-    database.subs = database.subs.filter(
-      (candidate) => candidate.endpoint !== subscription.endpoint,
-    );
+    database.subs = database.subs.filter((candidate) => candidate.endpoint !== subscription.endpoint);
     database.subs.push({
       userId: user.id,
       endpoint: subscription.endpoint as string,
@@ -738,21 +652,18 @@ export function createApp(environment: NodeJS.ProcessEnv = process.env): ApiRunt
     saveDatabase();
     return json({ ok: true });
   });
-
   app.post('/api/push/unsubscribe', async (context) => {
-    const user = readSession(context.req.header('cookie'));
+    const user = await readSession(context.req.raw.headers);
     if (!user) return json({ error: 'not signed in' }, 401);
     const body = await readJsonBody(context.req.raw, config.maxBodyBytes);
     database.subs = database.subs.filter(
-      (subscription) =>
-        !(subscription.userId === user.id && subscription.endpoint === body.endpoint),
+      (subscription) => !(subscription.userId === user.id && subscription.endpoint === body.endpoint),
     );
     saveDatabase();
     return json({ ok: true });
   });
-
   app.post('/api/push/test', async (context) => {
-    const user = readSession(context.req.header('cookie'));
+    const user = await readSession(context.req.raw.headers);
     if (!user) return json({ error: 'not signed in' }, 401);
     await sendPush(user.id, {
       title: 'openGym',
@@ -761,29 +672,23 @@ export function createApp(environment: NodeJS.ProcessEnv = process.env): ApiRunt
     });
     return json({ ok: true });
   });
-
   app.post('/api/push/rest-timer', async (context) => {
-    const user = readSession(context.req.header('cookie'));
+    const user = await readSession(context.req.raw.headers);
     if (!user) return json({ error: 'not signed in' }, 401);
     const body = await readJsonBody(context.req.raw, config.maxBodyBytes);
-    const seconds = Math.max(
-      1,
-      Math.min(3600, Math.round(Number(body.seconds) || 0)),
-    );
+    const seconds = Math.max(1, Math.min(3600, Math.round(Number(body.seconds) || 0)));
     if (!seconds) return json({ error: 'seconds required' }, 400);
     scheduleRestTimer(user.id, seconds);
     return json({ ok: true });
   });
-
-  app.post('/api/push/rest-timer/cancel', (context) => {
-    const user = readSession(context.req.header('cookie'));
+  app.post('/api/push/rest-timer/cancel', async (context) => {
+    const user = await readSession(context.req.raw.headers);
     if (!user) return json({ error: 'not signed in' }, 401);
     cancelRestTimer(user.id);
     return json({ ok: true });
   });
-
   app.post('/api/activity', async (context) => {
-    const user = readSession(context.req.header('cookie'));
+    const user = await readSession(context.req.raw.headers);
     if (!user) return json({ error: 'not signed in' }, 401);
     const body = await readJsonBody(context.req.raw, config.maxBodyBytes);
     if (body.active) {
@@ -802,8 +707,8 @@ export function createApp(environment: NodeJS.ProcessEnv = process.env): ApiRunt
     return json({ ok: true });
   });
 
-  app.get('/api/admin/users', (context) => {
-    const authorization = requireAdmin(context.req.header('cookie'));
+  app.get('/api/admin/users', async (context) => {
+    const authorization = await requireAdmin(context.req.raw.headers);
     if (authorization.response) return authorization.response;
     const users = database.users.map((user) => {
       const state = readState(user.id) || {};
@@ -825,9 +730,8 @@ export function createApp(environment: NodeJS.ProcessEnv = process.env): ApiRunt
     });
     return json({ users, invite_only: config.inviteOnly, now: Date.now() });
   });
-
-  app.get('/api/admin/user', (context) => {
-    const authorization = requireAdmin(context.req.header('cookie'));
+  app.get('/api/admin/user', async (context) => {
+    const authorization = await requireAdmin(context.req.raw.headers);
     if (authorization.response) return authorization.response;
     const id = context.req.query('id');
     const user = database.users.find((candidate) => candidate.id === id);
@@ -854,22 +758,28 @@ export function createApp(environment: NodeJS.ProcessEnv = process.env): ApiRunt
       workouts: (state.workouts || []).slice().reverse(),
     });
   });
-
   app.post('/api/admin/user/disable', async (context) => {
-    const authorization = requireAdmin(context.req.header('cookie'));
+    const authorization = await requireAdmin(context.req.raw.headers);
     if (authorization.response) return authorization.response;
     const body = await readJsonBody(context.req.raw, config.maxBodyBytes);
     const user = database.users.find((candidate) => candidate.id === body.id);
     if (!user) return json({ error: 'no such user' }, 404);
     if (isAdmin(user)) return json({ error: 'cannot disable an admin' }, 400);
     user.disabled = Boolean(body.disabled);
-    if (user.disabled) presence.delete(user.id);
+    if (user.disabled) {
+      presence.delete(user.id);
+      await auth.api.banUser({
+        body: { userId: user.id, banReason: 'account disabled' },
+        headers: context.req.raw.headers,
+      });
+    } else {
+      await auth.api.unbanUser({ body: { userId: user.id }, headers: context.req.raw.headers });
+    }
     saveDatabase();
     return json({ ok: true, id: user.id, disabled: user.disabled });
   });
-
-  app.get('/api/admin/invites', (context) => {
-    const authorization = requireAdmin(context.req.header('cookie'));
+  app.get('/api/admin/invites', async (context) => {
+    const authorization = await requireAdmin(context.req.raw.headers);
     if (authorization.response) return authorization.response;
     const invites = database.invites.map((invite) => ({
       ...invite,
@@ -879,9 +789,8 @@ export function createApp(environment: NodeJS.ProcessEnv = process.env): ApiRunt
     }));
     return json({ invites, invite_only: config.inviteOnly });
   });
-
   app.post('/api/admin/invites/new', async (context) => {
-    const authorization = requireAdmin(context.req.header('cookie'));
+    const authorization = await requireAdmin(context.req.raw.headers);
     if (authorization.response) return authorization.response;
     const body = await readJsonBody(context.req.raw, config.maxBodyBytes);
     let code: string;
@@ -898,9 +807,8 @@ export function createApp(environment: NodeJS.ProcessEnv = process.env): ApiRunt
     saveDatabase();
     return json({ invite });
   });
-
   app.post('/api/admin/invites/revoke', async (context) => {
-    const authorization = requireAdmin(context.req.header('cookie'));
+    const authorization = await requireAdmin(context.req.raw.headers);
     if (authorization.response) return authorization.response;
     const body = await readJsonBody(context.req.raw, config.maxBodyBytes);
     const invite = database.invites.find(
@@ -915,8 +823,7 @@ export function createApp(environment: NodeJS.ProcessEnv = process.env): ApiRunt
 
   app.notFound(() => json({ error: 'not found' }, 404));
   app.onError((error, context) => {
-    const pathname = new URL(context.req.url).pathname;
-    console.error(`${context.req.method} ${pathname}`, error);
+    console.error(`${context.req.method} ${new URL(context.req.url).pathname}`, error);
     return json({ error: 'server error' }, 500);
   });
 
@@ -924,9 +831,8 @@ export function createApp(environment: NodeJS.ProcessEnv = process.env): ApiRunt
     for (const interval of intervals) clearInterval(interval);
     for (const timer of restTimers.values()) clearTimeout(timer);
     restTimers.clear();
-    challenges.clear();
     presence.clear();
+    authRuntime.dispose();
   };
-
-  return { app, config, dispose };
+  return { app, config, auth, dispose };
 }

@@ -1,7 +1,11 @@
 FROM node:24-alpine AS build
 WORKDIR /app
 COPY package.json package-lock.json* ./
-RUN npm install
+# better-sqlite3 normally downloads a prebuild; keep the compiler toolchain in
+# the build stage so a new Node/Alpine ABI can fall back to node-gyp safely.
+RUN apk add --no-cache --virtual .build-deps python3 make g++ \
+  && npm install \
+  && apk del .build-deps
 COPY tsconfig.json ./
 COPY src ./src
 RUN npm run build && npm prune --omit=dev && npm cache clean --force
