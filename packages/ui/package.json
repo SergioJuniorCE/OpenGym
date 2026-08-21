@@ -14,5 +14,11 @@
   },
   "sideEffects": [
     "*.css"
-  ]
+  ],
+  "scripts": {
+    "typecheck": "tsc --noEmit -p tsconfig.json"
+  },
+  "devDependencies": {
+    "typescript": "7.0.2"
+  }
 }

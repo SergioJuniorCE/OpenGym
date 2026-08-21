@@ -7,19 +7,28 @@
     "dev": "vite",
     "build": "vite build",
     "preview": "vite preview",
+    "typecheck": "tsc --noEmit",
+    "check:locales": "node scripts/check-locales.ts",
     "test": "vitest run",
     "test:watch": "vitest"
   },
   "license": "AGPL-3.0-or-later",
   "dependencies": {
+    "@better-auth/passkey": "1.7.1",
+    "@better-auth/utils": "0.4.2",
     "@opengym/ui": "workspace:*",
+    "better-auth": "1.7.1",
     "react": "^19.2.7",
     "react-dom": "^19.2.7",
     "react-router-dom": "^7.18.2",
     "zustand": "^5.0.14"
   },
   "devDependencies": {
+    "@types/node": "^24.0.0",
+    "@types/react": "~19.2.0",
+    "@types/react-dom": "^19.2.3",
     "@vitejs/plugin-react": "^6.0.3",
+    "typescript": "7.0.2",
     "vite": "^8.1.5",
     "vitest": "^4.1.10"
   }

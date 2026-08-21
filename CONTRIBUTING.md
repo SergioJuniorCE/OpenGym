@@ -8,8 +8,9 @@ to keep it that way — easy to read, easy to self-host.
 ```
 apps/web/  React + Vite app (src/views, src/components, src/store, src/lib). Builds to static files.
 apps/mobile/ Expo + TypeScript native shell for the standalone mobile app (docs/MOBILE.md).
-apps/api/  backend — server.js (Node, no framework), one dependency (@simplewebauthn/server).
-web/       multi-stage Dockerfile (builds frontend → nginx) + nginx.conf (serves app, proxies /api).
+apps/api/  TypeScript backend — Hono on Node, WebAuthn, JSON-file persistence.
+Dockerfile multi-stage frontend image (builds frontend → nginx).
+web/       nginx.conf (serves app and proxies /api).
 media/     exercise img/gif (gitignored, fetched at runtime).
 docs/      self-hosting guide.
 ```
@@ -22,6 +23,8 @@ cp apps/api/.env.example apps/api/.env
 cp apps/web/.env.example apps/web/.env
 pnpm dev                            # API + frontend via Turborepo
 # open http://localhost:5173
+# all TypeScript packages and maintenance scripts:
+pnpm typecheck
 # training logic (progression rules, 1RM, how a session is read back):
 pnpm test
 ```
@@ -33,9 +36,8 @@ testing a different setup.
 
 ## Guidelines
 
-- **Keep it dependency-light.** The frontend uses React + Router + Zustand and nothing else;
-  new deps (front or back) are a hard sell. `apps/api/` has two (`@simplewebauthn/server` for passkeys,
-  `web-push` for notifications) — keep it near that.
+- **Keep it dependency-light.** The frontend uses React + Router + Zustand and the API uses Hono,
+  SimpleWebAuthn, and Web Push. New dependencies need to earn their place.
 - **Match the style.** Small components, clear names, comments only where the "why" isn't obvious.
   State lives in the Zustand store (`src/store`); pure helpers in `src/lib`.
 - **Don't commit** the exercise media (`media/`) or `data/` — they're gitignored.
@@ -51,7 +53,7 @@ testing a different setup.
 - Additional starter plans (upper/lower, full-body, 5×5…)
 - More languages for the exercise instructions (the dataset ships several)
 - Percentage / training-max programming (5/3/1-style) on top of the progression engine in
-  `src/lib/progression.js` — the policy interface is already there
+  `src/lib/progression.ts` — the policy interface is already there
 - Accessibility passes on the workout and chart screens
 
 ## Where to ask what

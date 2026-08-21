@@ -3,6 +3,7 @@ node_modules/
 dist/
 coverage/
 data-dev/
+data/auth.db*
 .env
 .env.*
 !.env.example

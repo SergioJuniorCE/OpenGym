@@ -13,7 +13,9 @@ patched. A fix ships in the next release and in the `latest` images on ghcr.io.
 Updating a self-hosted instance:
 
 ```bash
-git pull && docker compose pull && docker compose up -d
+git pull --ff-only
+docker compose -f docker-compose.yml -f compose.production.yml pull
+docker compose -f docker-compose.yml -f compose.production.yml up -d
 ```
 
 ## Reporting a vulnerability
@@ -43,12 +45,14 @@ in the thread; there's no objection, and no request to sit on it indefinitely.
 
 ## In scope
 
-- **`api/server.js`** — forging or replaying a session cookie, bypassing passkey verification,
-  reading or writing another user's data through `/api/data`, reaching `/api/admin/*` without
-  being an admin, or creating a profile without a valid code while `INVITE_ONLY=1`.
+- **`apps/api/src/app.ts` and `apps/api/src/auth.ts`** — forging or replaying a Better Auth session,
+  bypassing passkey verification, reading or writing another user's data through `/api/data`,
+  reaching `/api/admin/*` without being an admin, or creating a profile without a valid code while
+  `INVITE_ONLY=1`.
 - **Frontend** — XSS in the React app, or anything that lets a page on another origin read or
   change a signed-in user's data.
-- **Shipped deployment config** — `docker-compose.yml`, `web/nginx.conf`, the two Dockerfiles:
+- **Shipped deployment config** — `docker-compose.yml`, `compose.production.yml`,
+  `deploy/caddy/Caddyfile`, `web/nginx.conf`, and the two Dockerfiles:
   a default that exposes something a self-hoster wouldn't expect to be exposed.
 - **The published images** `ghcr.io/duartesantos8/opengym-api` and `-web`.
 
@@ -77,73 +81,64 @@ Read this before hosting openGym for anyone other than yourself.
 
 ### What it does
 
-- **Passkeys only.** No passwords, no email addresses, no reset flow. Registration and login are
-  verified server-side by `@simplewebauthn/server` against `expectedOrigin: ORIGIN` and
-  `expectedRPID: RP_ID`, and the authenticator's signature counter is stored and updated on every
-  login (`api/server.js:292-318`, `api/server.js:338-358`).
-- **Sessions are a signed cookie.** `gymsid` carries `<uid>:<expiry>:<version>` plus an
-  HMAC-SHA256 tag over it, compared in constant time (`api/server.js:148-161`). The key is 32
-  random bytes generated on first run and written to `./data/secret` with mode `0600`
-  (`api/server.js:34-36`). The cookie is `HttpOnly` and `SameSite=Lax`, and gets `Secure` **only
-  when `ORIGIN` starts with `https:`** (`api/server.js:29`, `api/server.js:198-201`).
-- **Any user can end every session they have.** `POST /api/logout/all` increments that account's
-  session version, and every authenticated request checks the version in the cookie against the
-  one on the user record (`api/server.js:167`, `api/server.js:187-188`), so every cookie ever
-  issued for the account — on every device, including a copy someone walked off with — stops
-  verifying at once. Passkeys are untouched; signing back in works immediately.
+- **Passkeys and email/password.** Better Auth's passkey plugin verifies ceremonies against `ORIGIN`
+  and `RP_ID`, while its credential provider hashes passwords and handles email sign-in. Both methods
+  use the standard `/api/auth/*` handler. New profiles receive a signed registration context so
+  invite checks happen before an account is created, not just in the browser.
+- **Sessions are Better Auth database sessions.** The `better-auth.session_token` cookie is signed
+  with the random key generated on first run and written to `./data/secret` with mode `0600`. It is
+  `HttpOnly`, `SameSite=Lax`, and `Secure` when `ORIGIN` is HTTPS. Session rows live in `auth.db` and
+  are never stored in the app's JSON metadata.
+- **Any user can end every session they have.** `POST /api/logout/all` deletes all Better Auth
+  sessions for the account, so every cookie on every device stops authorizing immediately. Passkeys
+  remain intact; signing back in works normally.
 - **Data is isolated per user by the session's uid.** `GET`/`PUT /api/data` only ever touch
-  `state-<uid>.json` for the caller (`api/server.js:375-392`); no route lets a normal user name
-  another user.
+  `state-<uid>.json` for the caller; no route lets a normal user name another user.
 - **Disabling an account takes effect immediately.** Every authenticated request and every login
-  is rejected for a disabled user (`api/server.js:184`, `api/server.js:357`).
+  is rejected for a disabled user.
 
 ### What it does not do
 
-- **Nothing in `./data` is encrypted.** It holds `db.json` (users, passkey public keys, push
-  subscriptions, invite codes), one `state-<uid>.json` per user with their complete workout
-  history and body-weight log, `secret`, and `vapid.json`. Anyone who can read that folder — you,
+- **Nothing in `./data` is encrypted.** It holds `auth.db` (users, passkey public keys, password
+  hashes, and sessions), `db.json` (app metadata, legacy credential migration backup, push
+  subscriptions, and invite codes), one `state-<uid>.json`
+  per user with their complete workout history and body-weight log, `secret`, and `vapid.json`. Anyone who can read that folder — you,
   whoever holds the backups, whoever gets into the host — can read every user's data, and with
   `secret` can mint a valid session cookie for any account. **If you host openGym for other
   people, they are trusting you exactly as much as they'd trust any server operator.**
 - **Admins can read everything.** A user listed in `ADMIN_UIDS` (or flagged `admin: true` in
   `db.json`) gets every user's full history and body weight, can disable accounts, and can create
-  or revoke invite codes (`api/server.js:460-540`). Off by default — a fresh instance has no admin.
+  or revoke invite codes. Off by default — a fresh instance has no admin.
 - **Sessions can't be revoked one device at a time.** Revocation is per *account*, not per
   session: `POST /api/logout/all` kills all of them at once and there is no device list to pick
-  from. `POST /api/logout` on its own only clears the cookie in that one browser
-  (`api/server.js:361`) — a copy taken beforehand keeps working. Sessions last **90 days** by
-  default, settable with `SESSION_DAYS` (`api/server.js:26`); each cookie carries the lifetime it
-  was issued with, so changing the setting doesn't reach cookies that are already out. Deleting
-  `./data/secret` and restarting still works as the instance-wide reset, and disabling an account
-  still locks out one user completely.
+  from. `POST /api/logout` signs out the current Better Auth session. Sessions last **90 days** by
+  default, settable with `SESSION_DAYS`; deleting `./data/secret` and restarting is an instance-wide
+  reset that invalidates every session and passkey signing context.
 - **CSRF protection is `SameSite=Lax` and nothing else.** There are no CSRF tokens.
-- **User verification is preferred, not required.** Both handshakes pass
-  `requireUserVerification: false` (`api/server.js:297`, `api/server.js:343`), so a passkey
-  released without a biometric or PIN is still accepted. In practice: unlocked device ≈ account
-  access.
-- **One passkey per profile, and no recovery.** Every successful registration creates a *new*
-  profile (`api/server.js:309-319`); there is no route to attach a second passkey to an existing
-  one, and no email or reset path. Lose the passkey and that profile is unreachable — only direct
-  surgery on `./data` gets it back.
-- **Disabling someone isn't a ban.** They can still register a fresh profile with a new passkey
-  unless `INVITE_ONLY=1` is set.
-- **HTTPS is required and the app doesn't provide it.** The API container speaks plain HTTP and
+- **User verification is preferred, not required.** Better Auth's passkey plugin accepts an
+  authenticator without a biometric or PIN when the platform permits it. In practice: unlocked
+  device ≈ account access.
+- **No recovery or verification email flow.** Email/password sign-in is enabled, but no mail sender
+  is configured for email verification or password-reset links. Back up `auth.db` and the
+  authenticator's own account if recovery matters.
+- **Disabling an account is a Better Auth ban.** Admin disable updates both app metadata and the
+  Better Auth user, deletes the user's sessions, and blocks future session creation for that user.
+- **HTTPS is required for passkeys and production credentials, and the app doesn't provide it.** The API container speaks plain HTTP and
   nginx listens on `:80` (`web/nginx.conf`); TLS is your reverse proxy's job. Without it,
   browsers won't do passkeys at all (except on `http://localhost`) and the session cookie is sent
   in the clear.
 - **No rate limiting anywhere.** Nothing throttles logins, registrations or writes, and
-  `POST /api/register/options` still answers whether an invite code is valid
-  (`api/server.js:272`), so an invite-only instance on the open internet should have a rate limit
-  in front of it. New invite codes are 16 hex characters — 64 bits (`api/server.js:525`) — which
+  `POST /api/register/context` answers whether an invite code is valid, so an invite-only instance
+  on the open internet should have a rate limit
+  in front of it. New invite codes are 16 hex characters — 64 bits — which
   makes guessing one impractical even unthrottled; codes generated by earlier versions are 8
   characters / 32 bits and still work, so revoke and reissue any that are still unused. The only
-  hard limit
-  in the app is a 5 MB request body (`api/server.js:27`).
+  hard limit in the app is a 5 MB request body.
 - **A few endpoints answer without a session:** `/api/health` (which includes the total user
-  count), `/api/config` (whether invite-only is on), `/api/push/public-key`, and the
-  register/login handshakes.
+  count), `/api/config` (whether invite-only is on), `/api/push/public-key`, the registration
+  context endpoint, and Better Auth's passkey and email sign-up/sign-in endpoints.
 - **Changing `RP_ID` invalidates every existing passkey.** They were bound to the old hostname
-  and will fail verification against the new one. The data stays on disk but is unreachable until
-  each user registers again — as a *new* profile. Choose your hostname before anyone registers.
+  and will fail verification against the new one. Choose your hostname before anyone registers;
+  existing users must re-register a passkey after a hostname change.
 - **Guest mode never reaches the backend.** That data lives unencrypted in the browser's
   `localStorage` and is gone when the browser storage is cleared.
